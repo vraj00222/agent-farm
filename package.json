@@ -1,0 +1,26 @@
+{
+  "name": "agent-farm",
+  "version": "0.0.1",
+  "description": "Run Claude Code in parallel across isolated git worktrees, then cherry-pick the wins.",
+  "bin": {
+    "agent-farm": "./bin/agent-farm.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "git-worktree",
+    "agents",
+    "cli",
+    "parallel"
+  ]
+}

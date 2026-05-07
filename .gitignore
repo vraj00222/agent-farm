@@ -1,0 +1,4 @@
+node_modules/
+.agent-farm/
+*.log
+.DS_Store
