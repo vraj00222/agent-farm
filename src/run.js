@@ -1,9 +1,15 @@
 'use strict'
 
 const path = require('path')
+const fs = require('fs')
 const { execFileSync } = require('child_process')
 const { slugify, git, uniqueSlug, c, fmtElapsed } = require('./util.js')
 const { runAgent } = require('./runner.js')
+const { State, statePath, runsDir } = require('./state.js')
+const { Semaphore } = require('./queue.js')
+const { runRepl } = require('./repl.js')
+
+const DEFAULT_MAX_CONCURRENT = 3
 
 function checkPrereqs() {
   try {
@@ -35,35 +41,101 @@ function checkRepoClean(repoRoot) {
   }
 }
 
+function getRepoRoot() {
+  try {
+    return git(['rev-parse', '--show-toplevel'])
+  } catch {
+    throw new Error('not inside a git repository.')
+  }
+}
+
 function printUsage() {
   process.stdout.write(
     [
       `${c.bold('agent-farm')} — run claude in isolated git worktrees, in parallel.`,
       '',
       'Usage:',
-      `  agent-farm "<prompt>"                              # one task`,
-      `  agent-farm "<prompt>" "<prompt>" "<prompt>"        # N parallel tasks`,
-      `  agent-farm @<id>: "<prompt>"                       # override the slug`,
+      `  agent-farm                                  # interactive REPL`,
+      `  agent-farm "<prompt>" ["<prompt>" ...]      # CLI fan-out`,
+      `  agent-farm @<id>: "<prompt>"                # override the slug`,
+      `  agent-farm --max <N> "<prompt>" ...         # cap parallelism (default ${DEFAULT_MAX_CONCURRENT})`,
+      '',
+      `  agent-farm status                           # print current session state`,
+      `  agent-farm logs <id>                        # print the JSONL run log for an agent`,
       '',
       'Each prompt becomes:',
-      '  - branch:   agent/<id>',
-      '  - worktree: ../<repo>-<id>/    (sibling, off your current HEAD)',
-      '  - process:  claude -p --dangerously-skip-permissions <wrapped prompt>',
-      '',
-      'On exit, agent-farm prints a summary, the cherry-pick commands you',
-      'can copy, and the cleanup commands. Worktrees are kept until you',
-      'remove them so you can inspect anything that went sideways.',
+      `  - branch:   agent/<id>`,
+      `  - worktree: ../<repo>-<id>/    (sibling, off your current HEAD)`,
+      `  - process:  claude -p --dangerously-skip-permissions <wrapped prompt>`,
       '',
     ].join('\n') + '\n'
   )
 }
 
-function printStartBanner({ tasks, repoRoot, baseSha }) {
+function parseArgs(argv) {
+  const out = {
+    max: DEFAULT_MAX_CONCURRENT,
+    prompts: [],
+    help: false,
+    command: null,
+    commandArg: null,
+  }
+
+  if (argv[0] === 'status') {
+    if (argv.length !== 1) throw new Error("'status' takes no arguments")
+    out.command = 'status'
+    return out
+  }
+  if (argv[0] === 'logs') {
+    if (argv.length !== 2) {
+      throw new Error("'logs' requires exactly one argument: agent-farm logs <id>")
+    }
+    out.command = 'logs'
+    out.commandArg = argv[1]
+    return out
+  }
+
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === '-h' || a === '--help') {
+      out.help = true
+      i++
+      continue
+    }
+    if (a === '--max') {
+      const v = argv[i + 1]
+      const n = parseInt(v, 10)
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error(`--max requires a positive integer (got ${v})`)
+      }
+      out.max = n
+      i += 2
+      continue
+    }
+    if (a.startsWith('--max=')) {
+      const n = parseInt(a.slice('--max='.length), 10)
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error(`--max requires a positive integer (got ${a})`)
+      }
+      out.max = n
+      i++
+      continue
+    }
+    out.prompts.push(a)
+    i++
+  }
+
+  return out
+}
+
+function printStartBanner({ tasks, repoRoot, baseSha, maxConcurrent }) {
   const repoName = path.basename(repoRoot)
   const idWidth = Math.max(...tasks.map((t) => t.id.length))
+  const cap = tasks.length > maxConcurrent ? c.dim(` (max ${maxConcurrent} parallel)`) : ''
   process.stdout.write('\n')
   process.stdout.write(
-    `${c.bold('[agent-farm]')} ${tasks.length} task${tasks.length === 1 ? '' : 's'} · base ${c.dim(baseSha.slice(0, 8))} · repo ${c.dim(repoName)}\n`
+    `${c.bold('[agent-farm]')} ${tasks.length} task${tasks.length === 1 ? '' : 's'}${cap} · base ${c.dim(baseSha.slice(0, 8))} · repo ${c.dim(repoName)}\n`
   )
   for (const t of tasks) {
     const idCol = c.cyan(t.id.padEnd(idWidth, ' '))
@@ -73,29 +145,27 @@ function printStartBanner({ tasks, repoRoot, baseSha }) {
   process.stdout.write('\n')
 }
 
-function printSummary(results, repoRoot) {
+function printSummary(results) {
   const idWidth = Math.max(...results.map((r) => r.id.length), 'id'.length)
   const stateGlyph = {
     done: c.green('✓'),
     noop: c.yellow('○'),
     failed: c.red('✗'),
-    pending: c.dim('?'),
-    running: c.dim('?'),
   }
 
   process.stdout.write('\n')
   process.stdout.write(`${c.bold('[agent-farm]')} summary\n`)
   for (const r of results) {
-    const glyph = stateGlyph[r.state] || '?'
+    const glyph = stateGlyph[r.state] || c.dim('?')
     const idCol = r.id.padEnd(idWidth, ' ')
-    const elapsed = fmtElapsed(r.elapsedMs).padStart(7, ' ')
+    const elapsed = fmtElapsed(r.elapsedMs || 0).padStart(7, ' ')
     let detail
     if (r.state === 'failed') {
       detail = c.red(
         r.error
           ? r.error
           : `exit ${r.exitCode}` +
-              (r.commits.length > 0 ? ` (${r.commits.length} partial commit(s))` : '')
+              ((r.commits || []).length > 0 ? ` (${r.commits.length} partial commit(s))` : '')
       )
     } else if (r.state === 'noop') {
       detail = c.yellow('no changes')
@@ -106,7 +176,7 @@ function printSummary(results, repoRoot) {
     process.stdout.write(
       `  ${glyph} ${c.cyan(idCol)}  ${c.dim(elapsed)}  ${detail}\n`
     )
-    if (r.state === 'failed' && r.lastLines.length > 0) {
+    if (r.state === 'failed' && (r.lastLines || []).length > 0) {
       for (const line of r.lastLines) {
         process.stdout.write(`     ${c.dim('│')} ${c.dim(line)}\n`)
       }
@@ -134,28 +204,118 @@ function printSummary(results, repoRoot) {
   return { wins: wins.length, losses: losses.length }
 }
 
+function doStatus() {
+  const repoRoot = getRepoRoot()
+  const state = State.read(repoRoot)
+  if (!state) {
+    process.stdout.write(c.dim('no .agent-farm/state.json — no session has run in this repo yet.\n'))
+    return
+  }
+  const agents = state.all()
+  if (agents.length === 0) {
+    process.stdout.write(c.dim('state.json exists but no agents recorded.\n'))
+    return
+  }
+  const idWidth = Math.max(...agents.map((a) => a.id.length))
+  const stateColor = {
+    queued: c.dim,
+    running: c.cyan,
+    done: c.green,
+    noop: c.yellow,
+    failed: c.red,
+  }
+  process.stdout.write(
+    `\n${c.bold('[agent-farm] status')} · base ${c.dim(state.data.baseSha.slice(0, 8))} · ${agents.length} agent${agents.length === 1 ? '' : 's'}\n`
+  )
+  for (const a of agents) {
+    const colorFn = stateColor[a.state] || ((s) => s)
+    const elapsed = a.elapsedMs ? fmtElapsed(a.elapsedMs) : a.startedAt ? `${fmtElapsed(Date.now() - a.startedAt)}+` : '-'
+    const detail =
+      a.state === 'done' || a.state === 'failed' || a.state === 'noop'
+        ? `${(a.commits || []).length}c · ${(a.filesChanged || []).length}f`
+        : (a.pid ? `pid ${a.pid}` : '')
+    process.stdout.write(
+      `  ${colorFn(a.state.padEnd(7))}  ${c.cyan(a.id.padEnd(idWidth))}  ${c.dim(elapsed.padStart(8))}  ${c.dim(detail)}\n`
+    )
+  }
+  process.stdout.write('\n')
+}
+
+function doLogs(id) {
+  const repoRoot = getRepoRoot()
+  const dir = runsDir(repoRoot)
+  if (!fs.existsSync(dir)) {
+    throw new Error(`no logs directory at ${dir}`)
+  }
+  const matches = fs
+    .readdirSync(dir)
+    .filter((f) => f.startsWith(`${id}-`) && f.endsWith('.log'))
+    .sort()
+  if (matches.length === 0) {
+    throw new Error(`no run logs for "${id}" in ${dir}`)
+  }
+  const latest = path.join(dir, matches[matches.length - 1])
+  process.stdout.write(c.dim(`# ${latest}\n`))
+  const raw = fs.readFileSync(latest, 'utf8')
+  for (const line of raw.split('\n')) {
+    if (!line) continue
+    let ev
+    try {
+      ev = JSON.parse(line)
+    } catch {
+      process.stdout.write(line + '\n')
+      continue
+    }
+    const ts = new Date(ev.t).toISOString().slice(11, 23)
+    const type = ev.type
+    const rest = Object.keys(ev)
+      .filter((k) => k !== 't' && k !== 'type')
+      .map((k) => {
+        const v = ev[k]
+        return `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`
+      })
+      .join(' ')
+    const colorFn =
+      type === 'stderr' || type === 'error'
+        ? c.red
+        : type === 'exit'
+          ? c.green
+          : type === 'spawn'
+            ? c.cyan
+            : type === 'autocommit'
+              ? c.yellow
+              : (s) => s
+    process.stdout.write(`${c.dim(ts)} ${colorFn(type.padEnd(8))} ${rest}\n`)
+  }
+}
+
 async function run(argv) {
-  if (argv.length === 0 || argv[0] === '-h' || argv[0] === '--help') {
+  let args
+  try {
+    args = parseArgs(argv)
+  } catch (e) {
+    process.stderr.write(`agent-farm: ${e.message}\n`)
+    process.exit(1)
+  }
+
+  if (args.help) {
     printUsage()
     return
   }
 
-  const prompts = argv.filter((a) => a.trim().length > 0)
-  if (prompts.length === 0) {
-    printUsage()
-    process.exit(1)
-  }
+  if (args.command === 'status') return doStatus()
+  if (args.command === 'logs') return doLogs(args.commandArg)
 
   checkPrereqs()
-
-  let repoRoot
-  try {
-    repoRoot = git(['rev-parse', '--show-toplevel'])
-  } catch {
-    throw new Error('not inside a git repository.')
-  }
+  const repoRoot = getRepoRoot()
   checkRepoClean(repoRoot)
   const baseSha = git(['rev-parse', 'HEAD'], repoRoot)
+
+  let prompts = args.prompts.filter((a) => a.trim().length > 0)
+  if (prompts.length === 0) {
+    prompts = await runRepl()
+    if (prompts.length === 0) return
+  }
 
   const taken = new Set()
   const tasks = prompts.map((prompt) => {
@@ -164,26 +324,36 @@ async function run(argv) {
     return { prompt, ...slug }
   })
 
-  printStartBanner({ tasks, repoRoot, baseSha })
+  const maxConcurrent = Math.min(args.max, tasks.length)
+  const state = State.init({ repoRoot, baseSha, maxConcurrent })
+
+  printStartBanner({ tasks, repoRoot, baseSha, maxConcurrent })
   const tagWidth = Math.max(...tasks.map((t) => t.id.length))
+  const sema = new Semaphore(maxConcurrent)
 
   const results = await Promise.all(
     tasks.map((t) =>
-      runAgent({
-        prompt: t.prompt,
-        id: t.id,
-        branch: t.branch,
-        worktreePath: t.worktreePath,
-        baseSha,
-        repoRoot,
-        tagWidth,
-        out: process.stdout,
-        err: process.stderr,
-      })
+      sema.run(() =>
+        runAgent({
+          prompt: t.prompt,
+          id: t.id,
+          branch: t.branch,
+          worktreePath: t.worktreePath,
+          baseSha,
+          repoRoot,
+          tagWidth,
+          state,
+          out: process.stdout,
+          err: process.stderr,
+        })
+      )
     )
   )
 
-  const { wins, losses } = printSummary(results, repoRoot)
+  const { wins, losses } = printSummary(results)
+
+  process.stdout.write(c.dim(`state: ${statePath(repoRoot)}\n`))
+  process.stdout.write(c.dim(`logs:  ${runsDir(repoRoot)}\n\n`))
 
   if (wins === 0 && losses > 0) process.exit(1)
 }

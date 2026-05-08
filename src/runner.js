@@ -9,6 +9,7 @@ const {
   lineBuffer,
   fmtElapsed,
 } = require('./util.js')
+const { loggerFor } = require('./logger.js')
 
 function wrapPrompt(prompt) {
   return `${prompt}
@@ -64,6 +65,7 @@ async function runAgent({
   baseSha,
   repoRoot,
   tagWidth,
+  state,
   out,
   err,
 }) {
@@ -71,99 +73,152 @@ async function runAgent({
   const writeOut = (line) => out.write(`${tag(line)}\n`)
   const writeErr = (line) => err.write(`${tag(line)}\n`)
 
-  const result = {
+  const startedAt = Date.now()
+  const { logger, filepath: logFile } = loggerFor(repoRoot, id, startedAt)
+
+  state.putAgent({
     id,
     branch,
     worktreePath,
-    state: 'pending',
+    prompt,
+    state: 'queued',
+    pid: null,
+    startedAt: null,
+    endedAt: null,
+    elapsedMs: null,
     exitCode: null,
-    elapsedMs: 0,
+    lastLines: [],
     commits: [],
     filesChanged: [],
     autoCommitted: false,
-    error: null,
-    lastLines: [],
-  }
+    logFile,
+  })
+
+  const result = state.get(id)
 
   try {
     git(['worktree', 'add', worktreePath, '-b', branch], repoRoot)
   } catch (e) {
-    result.state = 'failed'
-    result.error = `worktree create failed: ${e.message.split('\n')[0]}`
-    writeErr(c.red(result.error))
-    return result
+    const errMsg = `worktree create failed: ${e.message.split('\n')[0]}`
+    state.transition(id, 'failed', { error: errMsg })
+    logger.log('error', { message: errMsg })
+    logger.close()
+    writeErr(c.red(errMsg))
+    return state.get(id)
   }
 
-  result.state = 'running'
+  state.transition(id, 'running', { startedAt })
   writeOut(c.dim(`spawning claude in ${worktreePath}`))
 
-  const startedAt = Date.now()
   const proc = spawn(
     'claude',
     ['-p', '--dangerously-skip-permissions', wrapPrompt(prompt)],
     { cwd: worktreePath, stdio: ['ignore', 'pipe', 'pipe'] }
   )
 
-  const onLine = (sink) => (line) => {
+  state.transition(id, 'running', { pid: proc.pid })
+  logger.log('spawn', { pid: proc.pid, worktree: worktreePath, baseSha })
+
+  const lastLines = []
+  const onLine = (kind, sink) => (line) => {
     const clean = stripAnsi(line)
     if (clean.length === 0) return
     sink(clean)
-    result.lastLines.push(clean)
-    if (result.lastLines.length > 5) result.lastLines.shift()
+    logger.log(kind, { line: clean })
+    lastLines.push(clean)
+    if (lastLines.length > 5) lastLines.shift()
   }
 
-  const stdoutBuf = lineBuffer(onLine(writeOut))
-  const stderrBuf = lineBuffer(onLine(writeErr))
+  const stdoutBuf = lineBuffer(onLine('stdout', writeOut))
+  const stderrBuf = lineBuffer(onLine('stderr', writeErr))
   proc.stdout.on('data', stdoutBuf.push)
   proc.stderr.on('data', stderrBuf.push)
 
   const exitCode = await new Promise((resolve) => {
-    proc.on('exit', (code, signal) => resolve(code === null ? 128 : code))
+    proc.on('exit', (code) => resolve(code === null ? 128 : code))
     proc.on('error', (e) => {
       writeErr(c.red(`spawn error: ${e.message}`))
+      logger.log('error', { message: e.message })
       resolve(127)
     })
   })
   stdoutBuf.flush()
   stderrBuf.flush()
 
-  result.exitCode = exitCode
-  result.elapsedMs = Date.now() - startedAt
+  const endedAt = Date.now()
+  const elapsedMs = endedAt - startedAt
 
   if (exitCode !== 0) {
-    result.state = 'failed'
-    writeErr(c.red(`claude exited ${exitCode} after ${fmtElapsed(result.elapsedMs)}`))
-    result.commits = commitsSince(worktreePath, baseSha)
-    result.filesChanged = filesChangedSince(worktreePath, baseSha)
-    return result
+    const commits = commitsSince(worktreePath, baseSha)
+    const filesChanged = filesChangedSince(worktreePath, baseSha)
+    state.transition(id, 'failed', {
+      exitCode,
+      endedAt,
+      elapsedMs,
+      commits,
+      filesChanged,
+      lastLines: [...lastLines],
+    })
+    logger.log('exit', { code: exitCode, elapsedMs, commits: commits.length })
+    logger.close()
+    writeErr(c.red(`claude exited ${exitCode} after ${fmtElapsed(elapsedMs)}`))
+    return state.get(id)
   }
 
+  let autoCommitted = false
   if (isWorktreeDirty(worktreePath)) {
     try {
       autoCommit(worktreePath, id)
-      result.autoCommitted = true
+      autoCommitted = true
+      logger.log('autocommit', {})
       writeOut(c.dim(`auto-committed pending changes`))
     } catch (e) {
-      result.state = 'failed'
-      result.error = `auto-commit failed: ${e.message.split('\n')[0]}`
-      writeErr(c.red(result.error))
-      return result
+      const errMsg = `auto-commit failed: ${e.message.split('\n')[0]}`
+      state.transition(id, 'failed', {
+        exitCode,
+        endedAt,
+        elapsedMs,
+        error: errMsg,
+        lastLines: [...lastLines],
+      })
+      logger.log('error', { message: errMsg })
+      logger.close()
+      writeErr(c.red(errMsg))
+      return state.get(id)
     }
   }
 
-  result.commits = commitsSince(worktreePath, baseSha)
-  result.filesChanged = filesChangedSince(worktreePath, baseSha)
-  result.state = result.commits.length > 0 ? 'done' : 'noop'
+  const commits = commitsSince(worktreePath, baseSha)
+  const filesChanged = filesChangedSince(worktreePath, baseSha)
+  const finalState = commits.length > 0 ? 'done' : 'noop'
+
+  state.transition(id, finalState, {
+    exitCode,
+    endedAt,
+    elapsedMs,
+    commits,
+    filesChanged,
+    autoCommitted,
+    lastLines: [...lastLines],
+  })
+  logger.log('exit', {
+    code: exitCode,
+    elapsedMs,
+    commits: commits.length,
+    autoCommitted,
+    state: finalState,
+  })
+  logger.close()
 
   const summary =
-    result.state === 'done'
+    finalState === 'done'
       ? c.green(
-          `done in ${fmtElapsed(result.elapsedMs)} · ${result.commits.length} commit${result.commits.length === 1 ? '' : 's'} · ${result.filesChanged.length} file${result.filesChanged.length === 1 ? '' : 's'}`
+          `done in ${fmtElapsed(elapsedMs)} · ${commits.length} commit${commits.length === 1 ? '' : 's'} · ${filesChanged.length} file${filesChanged.length === 1 ? '' : 's'}`
         )
-      : c.yellow(`no-op in ${fmtElapsed(result.elapsedMs)} (claude made no changes)`)
+      : c.yellow(`no-op in ${fmtElapsed(elapsedMs)} (claude made no changes)`)
   writeOut(summary)
 
-  return result
+  return state.get(id)
 }
 
 module.exports = { runAgent }

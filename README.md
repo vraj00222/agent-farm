@@ -4,7 +4,7 @@ agent-farm is a local dev tool. You give it a list of tasks, it spawns a Git Wor
 
 ## status
 
-**v0.0.2 — N parallel tasks.** Pass multiple prompts and they all run at once in isolated worktrees, with tagged interleaved logs and a final summary. Hybrid commit handling (claude commits when it can; agent-farm auto-commits whatever's left). Ink TUI, REPL, and `state.json` arrive in v0.0.3 → v0.0.4.
+**v0.0.3 — REPL + state + queue.** Run `agent-farm` with no args to drop into an interactive prompt loop, type tasks one per line, then `run` to fan them out. A real maxConcurrent queue (default 3) gates parallelism. Every transition is recorded in `.agent-farm/state.json`; every agent gets a JSONL run log under `.agent-farm/runs/`. New subcommands: `agent-farm status` and `agent-farm logs <id>`. Ink TUI is next (v0.0.4).
 
 ## requirements
 
@@ -24,17 +24,46 @@ npm link
 
 ## usage
 
-From inside any git repo with a clean tracked tree:
+From inside any git repo with a clean tracked tree.
+
+### REPL (default)
+
+```bash
+agent-farm
+```
+
+```
+agent-farm REPL — type a prompt per line.
+  run    start the queue with what you have so far
+  drop   discard the last prompt
+  quit   exit without running (Ctrl+D / Ctrl+C also abort)
+
+? task 1 › fix the JWT bug in src/auth/middleware.ts
+? task 2 › @bench: benchmark slugify and write result to BENCH.md
+? task 3 › run
+```
+
+### CLI fan-out
 
 ```bash
 # one task
 agent-farm "fix the typo in the readme"
 
-# many tasks, in parallel
+# many tasks
 agent-farm \
   "fix the typo in the readme" \
   "add a license header to all .js files in src/" \
   "@bench: benchmark the slugify function and write the result to BENCH.md"
+
+# cap parallelism explicitly (default 3)
+agent-farm --max 2 "p1" "p2" "p3" "p4"   # 2 run, 2 queue
+```
+
+### Subcommands
+
+```bash
+agent-farm status           # print state.json table — works mid-run or after
+agent-farm logs <id>        # render an agent's JSONL run log
 ```
 
 Each prompt becomes:
@@ -89,14 +118,28 @@ Claude Code in `-p` mode often does the work but doesn't commit. That breaks `gi
 
 Headless Claude Code can't answer permission prompts — there's no human in the loop during a parallel run. The blast radius is the worktree, not your main checkout, so claude can only modify files in `../<repo>-<id>/`. You always review the diff before cherry-picking. This is the standard pattern for Claude Code in CI / agent-orchestrator contexts.
 
+## state on disk
+
+```
+your-repo/
+├── .agent-farm/
+│   ├── state.json              # written atomically on every transition
+│   └── runs/
+│       ├── fix-auth-1714000000000.log     # JSONL: spawn / stdout / stderr / exit
+│       └── bench-1714000005000.log
+└── ...
+```
+
+`state.json` is the source of truth while a session runs, and is what `agent-farm status` reads. Run logs are append-only JSONL — one event per line — designed for replay and observability without changing the schema.
+
 ## roadmap
 
 | rung | adds |
 |------|------|
 | v0.0.1 ✓ | single-task spike |
 | v0.0.2 ✓ | N parallel tasks, tagged interleaved logs, hybrid commit, summary + cleanup |
-| v0.0.3 | REPL input, `.agent-farm/state.json`, queue with maxConcurrent |
+| v0.0.3 ✓ | REPL input, `.agent-farm/state.json`, queue with maxConcurrent, `status` + `logs` subcommands |
 | v0.0.4 | Ink split-pane TUI |
 | v0.0.5 | cherry-pick orchestration + conflict pause |
-| v0.0.6 | `--tasks tasks.json`, `clean`, `kill`, `retry`, JSONL logs |
+| v0.0.6 | `--tasks tasks.json`, `clean`, `kill`, `retry`, history |
 | v0.1.0 | tag, publish, write the launch post |
