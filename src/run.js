@@ -1,42 +1,9 @@
 'use strict'
 
 const path = require('path')
-const { execFileSync, spawn } = require('child_process')
-const { existsSync } = require('fs')
-
-const STOPWORDS = new Set([
-  'the', 'a', 'an', 'in', 'to', 'for', 'of', 'and', 'or',
-  'with', 'on', 'at', 'by', 'from', 'as', 'is', 'be',
-])
-
-function git(args, cwd) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
-}
-
-function gitTry(args, cwd) {
-  try {
-    execFileSync('git', args, { cwd, stdio: 'ignore' })
-    return true
-  } catch {
-    return false
-  }
-}
-
-function slugify(prompt) {
-  const override = prompt.match(/^@([a-z0-9][a-z0-9-]*):/i)
-  if (override) return override[1].toLowerCase()
-
-  const slug = prompt
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter((w) => !STOPWORDS.has(w))
-    .slice(0, 4)
-    .join('-')
-
-  return slug || 'task'
-}
+const { execFileSync } = require('child_process')
+const { slugify, git, uniqueSlug, c, fmtElapsed } = require('./util.js')
+const { runAgent } = require('./runner.js')
 
 function checkPrereqs() {
   try {
@@ -68,39 +35,103 @@ function checkRepoClean(repoRoot) {
   }
 }
 
-function uniqueBranchAndPath(repoRoot, baseId) {
-  const repoName = path.basename(repoRoot)
-  let id = baseId
-  let i = 2
-  while (true) {
-    const branch = `agent/${id}`
-    const wtPath = path.resolve(repoRoot, '..', `${repoName}-${id}`)
-    const branchExists = gitTry(['rev-parse', '--verify', branch], repoRoot)
-    const pathExists = existsSync(wtPath)
-    if (!branchExists && !pathExists) {
-      return { id, branch, worktreePath: wtPath }
-    }
-    id = `${baseId}-${i++}`
-  }
-}
-
 function printUsage() {
   process.stdout.write(
     [
-      'agent-farm — run claude in an isolated git worktree.',
+      `${c.bold('agent-farm')} — run claude in isolated git worktrees, in parallel.`,
       '',
       'Usage:',
-      '  agent-farm "<prompt>"',
-      '  agent-farm @<id>: "<prompt>"   # override the slug',
+      `  agent-farm "<prompt>"                              # one task`,
+      `  agent-farm "<prompt>" "<prompt>" "<prompt>"        # N parallel tasks`,
+      `  agent-farm @<id>: "<prompt>"                       # override the slug`,
       '',
-      'Behavior:',
-      '  - creates ../<repo>-<id>/ as a sibling worktree on branch agent/<id>',
-      '  - branches off your current HEAD',
-      '  - spawns: claude -p --dangerously-skip-permissions "<prompt>"',
-      '  - on exit, prints the diff and the cherry-pick command',
+      'Each prompt becomes:',
+      '  - branch:   agent/<id>',
+      '  - worktree: ../<repo>-<id>/    (sibling, off your current HEAD)',
+      '  - process:  claude -p --dangerously-skip-permissions <wrapped prompt>',
+      '',
+      'On exit, agent-farm prints a summary, the cherry-pick commands you',
+      'can copy, and the cleanup commands. Worktrees are kept until you',
+      'remove them so you can inspect anything that went sideways.',
       '',
     ].join('\n') + '\n'
   )
+}
+
+function printStartBanner({ tasks, repoRoot, baseSha }) {
+  const repoName = path.basename(repoRoot)
+  const idWidth = Math.max(...tasks.map((t) => t.id.length))
+  process.stdout.write('\n')
+  process.stdout.write(
+    `${c.bold('[agent-farm]')} ${tasks.length} task${tasks.length === 1 ? '' : 's'} · base ${c.dim(baseSha.slice(0, 8))} · repo ${c.dim(repoName)}\n`
+  )
+  for (const t of tasks) {
+    const idCol = c.cyan(t.id.padEnd(idWidth, ' '))
+    const branchCol = c.dim(t.branch)
+    process.stdout.write(`  ${c.dim('▸')} ${idCol}  ${branchCol}\n`)
+  }
+  process.stdout.write('\n')
+}
+
+function printSummary(results, repoRoot) {
+  const idWidth = Math.max(...results.map((r) => r.id.length), 'id'.length)
+  const stateGlyph = {
+    done: c.green('✓'),
+    noop: c.yellow('○'),
+    failed: c.red('✗'),
+    pending: c.dim('?'),
+    running: c.dim('?'),
+  }
+
+  process.stdout.write('\n')
+  process.stdout.write(`${c.bold('[agent-farm]')} summary\n`)
+  for (const r of results) {
+    const glyph = stateGlyph[r.state] || '?'
+    const idCol = r.id.padEnd(idWidth, ' ')
+    const elapsed = fmtElapsed(r.elapsedMs).padStart(7, ' ')
+    let detail
+    if (r.state === 'failed') {
+      detail = c.red(
+        r.error
+          ? r.error
+          : `exit ${r.exitCode}` +
+              (r.commits.length > 0 ? ` (${r.commits.length} partial commit(s))` : '')
+      )
+    } else if (r.state === 'noop') {
+      detail = c.yellow('no changes')
+    } else {
+      const auto = r.autoCommitted ? c.dim(' (auto-committed)') : ''
+      detail = `${r.commits.length} commit${r.commits.length === 1 ? '' : 's'} · ${r.filesChanged.length} file${r.filesChanged.length === 1 ? '' : 's'}${auto}`
+    }
+    process.stdout.write(
+      `  ${glyph} ${c.cyan(idCol)}  ${c.dim(elapsed)}  ${detail}\n`
+    )
+    if (r.state === 'failed' && r.lastLines.length > 0) {
+      for (const line of r.lastLines) {
+        process.stdout.write(`     ${c.dim('│')} ${c.dim(line)}\n`)
+      }
+    }
+  }
+
+  const wins = results.filter((r) => r.state === 'done')
+  const losses = results.filter((r) => r.state === 'failed' || r.state === 'noop')
+
+  if (wins.length > 0) {
+    process.stdout.write(`\n${c.bold('cherry-pick:')}\n`)
+    for (const r of wins) {
+      process.stdout.write(`  git cherry-pick ${r.branch}\n`)
+    }
+  }
+
+  process.stdout.write(`\n${c.bold('cleanup:')}\n`)
+  for (const r of [...wins, ...losses]) {
+    process.stdout.write(
+      `  git worktree remove "${r.worktreePath}" && git branch -D ${r.branch}\n`
+    )
+  }
+  process.stdout.write('\n')
+
+  return { wins: wins.length, losses: losses.length }
 }
 
 async function run(argv) {
@@ -109,8 +140,8 @@ async function run(argv) {
     return
   }
 
-  const prompt = argv.join(' ').trim()
-  if (!prompt) {
+  const prompts = argv.filter((a) => a.trim().length > 0)
+  if (prompts.length === 0) {
     printUsage()
     process.exit(1)
   }
@@ -124,87 +155,37 @@ async function run(argv) {
     throw new Error('not inside a git repository.')
   }
   checkRepoClean(repoRoot)
-
   const baseSha = git(['rev-parse', 'HEAD'], repoRoot)
-  const baseId = slugify(prompt)
-  const { id, branch, worktreePath } = uniqueBranchAndPath(repoRoot, baseId)
 
-  process.stdout.write(
-    [
-      `[agent-farm] task:     ${prompt}`,
-      `[agent-farm] id:       ${id}`,
-      `[agent-farm] branch:   ${branch}`,
-      `[agent-farm] worktree: ${worktreePath}`,
-      `[agent-farm] base:     ${baseSha.slice(0, 8)}`,
-      '',
-    ].join('\n') + '\n'
-  )
+  const taken = new Set()
+  const tasks = prompts.map((prompt) => {
+    const baseId = slugify(prompt)
+    const slug = uniqueSlug(repoRoot, baseId, taken)
+    return { prompt, ...slug }
+  })
 
-  git(['worktree', 'add', worktreePath, '-b', branch], repoRoot)
+  printStartBanner({ tasks, repoRoot, baseSha })
+  const tagWidth = Math.max(...tasks.map((t) => t.id.length))
 
-  const startedAt = Date.now()
-  process.stdout.write(`[${id}] spawning claude...\n`)
-
-  const proc = spawn(
-    'claude',
-    ['-p', '--dangerously-skip-permissions', prompt],
-    { cwd: worktreePath, stdio: ['ignore', 'pipe', 'pipe'] }
-  )
-
-  const tag = (stream) => (chunk) => {
-    chunk
-      .toString()
-      .split('\n')
-      .forEach((line) => {
-        if (line.length > 0) stream.write(`[${id}] ${line}\n`)
+  const results = await Promise.all(
+    tasks.map((t) =>
+      runAgent({
+        prompt: t.prompt,
+        id: t.id,
+        branch: t.branch,
+        worktreePath: t.worktreePath,
+        baseSha,
+        repoRoot,
+        tagWidth,
+        out: process.stdout,
+        err: process.stderr,
       })
-  }
-  proc.stdout.on('data', tag(process.stdout))
-  proc.stderr.on('data', tag(process.stderr))
-
-  const exitCode = await new Promise((resolve) => proc.on('exit', resolve))
-  const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1)
-
-  process.stdout.write(`\n[agent-farm] exit ${exitCode} after ${elapsedSec}s\n`)
-
-  if (exitCode === 0) {
-    const diff = execFileSync('git', ['diff', `${baseSha}..HEAD`], {
-      cwd: worktreePath,
-      encoding: 'utf8',
-    })
-    const commits = execFileSync(
-      'git',
-      ['log', '--oneline', `${baseSha}..HEAD`],
-      { cwd: worktreePath, encoding: 'utf8' }
-    ).trim()
-
-    process.stdout.write(
-      [
-        '',
-        `[agent-farm] commits on ${branch}:`,
-        commits || '(no new commits — claude may not have committed)',
-        '',
-        `[agent-farm] diff (${baseSha.slice(0, 8)}..HEAD):`,
-        '',
-      ].join('\n') + '\n'
     )
-    process.stdout.write(diff || '(no changes)\n')
+  )
 
-    process.stdout.write(
-      [
-        '',
-        `[agent-farm] worktree kept at: ${worktreePath}`,
-        `[agent-farm] cherry-pick:      git cherry-pick ${branch}`,
-        `[agent-farm] cleanup:          git worktree remove "${worktreePath}" && git branch -D ${branch}`,
-        '',
-      ].join('\n') + '\n'
-    )
-  } else {
-    process.stderr.write(
-      `[agent-farm] claude failed. worktree kept for inspection: ${worktreePath}\n`
-    )
-    process.exit(exitCode || 1)
-  }
+  const { wins, losses } = printSummary(results, repoRoot)
+
+  if (wins === 0 && losses > 0) process.exit(1)
 }
 
-module.exports = { run, slugify }
+module.exports = { run }
