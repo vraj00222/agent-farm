@@ -23,13 +23,18 @@ function checkPrereqs() {
   } catch {
     throw new Error('`git` not found in PATH.')
   }
+  let claudeVersion
   try {
-    execFileSync('claude', ['--version'], { stdio: 'ignore' })
+    const raw = execFileSync('claude', ['--version'], { encoding: 'utf8' }).trim()
+    // typical output: "2.1.132 (Claude Code)"
+    const m = raw.match(/^(\S+)/)
+    claudeVersion = m ? m[1] : raw
   } catch {
     throw new Error(
       '`claude` CLI not found in PATH. Install: npm i -g @anthropic-ai/claude-code'
     )
   }
+  return { claudeVersion }
 }
 
 function checkRepoClean(repoRoot) {
@@ -75,6 +80,7 @@ function printUsage() {
       `  agent-farm "<prompt>" ["<prompt>" ...]      # open TUI with these tasks queued`,
       `  agent-farm @<id>: "<prompt>"                # override the slug`,
       `  agent-farm --max <N> "<prompt>" ...         # cap parallelism (default ${DEFAULT_MAX_CONCURRENT})`,
+      `  agent-farm --model <name> "<prompt>" ...    # claude --model (e.g. opus, sonnet, haiku)`,
       '',
       `  agent-farm status                           # print current session state`,
       `  agent-farm logs <id>                        # print the JSONL run log for an agent`,
@@ -96,6 +102,7 @@ function printUsage() {
 function parseArgs(argv) {
   const out = {
     max: DEFAULT_MAX_CONCURRENT,
+    model: null,
     prompts: [],
     help: false,
     command: null,
@@ -140,6 +147,22 @@ function parseArgs(argv) {
         throw new Error(`--max requires a positive integer (got ${a})`)
       }
       out.max = n
+      i++
+      continue
+    }
+    if (a === '--model') {
+      const v = argv[i + 1]
+      if (!v || v.startsWith('-')) {
+        throw new Error('--model requires a value (e.g. opus, sonnet, haiku, or a model id)')
+      }
+      out.model = v
+      i += 2
+      continue
+    }
+    if (a.startsWith('--model=')) {
+      const v = a.slice('--model='.length)
+      if (!v) throw new Error('--model= requires a value')
+      out.model = v
       i++
       continue
     }
@@ -356,7 +379,7 @@ async function run(argv) {
   if (args.command === 'status') return doStatus()
   if (args.command === 'logs') return doLogs(args.commandArg)
 
-  checkPrereqs()
+  const { claudeVersion } = checkPrereqs()
   const repoRoot = getRepoRoot()
   checkRepoClean(repoRoot)
   const baseSha = git(['rev-parse', 'HEAD'], repoRoot)
@@ -393,6 +416,7 @@ async function run(argv) {
           baseSha,
           repoRoot,
           state,
+          model: args.model,
         })
       )
       .catch((e) => {
@@ -416,6 +440,8 @@ async function run(argv) {
       baseSha,
       repoName,
       queueTask,
+      claudeVersion,
+      model: args.model,
     })
     // After Ink unmounts, child processes may still be running — wait for them
     // briefly so state.json reflects final outcomes before printSummary reads it.
@@ -449,6 +475,7 @@ async function run(argv) {
             baseSha,
             repoRoot,
             state,
+            model: args.model,
           })
         )
       )

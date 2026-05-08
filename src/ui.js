@@ -49,12 +49,29 @@ function elapsedFor(a) {
   return ''
 }
 
-function detailFor(a) {
-  if (a.state === 'queued') return 'queued'
-  if (a.state === 'running') return 'running'
-  if (a.state === 'noop') return 'no changes'
-  if (a.state === 'failed') return a.error || `exit ${a.exitCode}`
-  return `${(a.commits || []).length}c · ${(a.filesChanged || []).length}f${a.autoCommitted ? ' (auto)' : ''}`
+// Render the per-agent detail line as an array of Text nodes so we can
+// colorize commit count, file count, and modifiers independently.
+function detailNodes(a) {
+  if (a.state === 'queued') return [e(Text, { color: 'gray' }, 'queued')]
+  if (a.state === 'running') {
+    return [
+      e(Text, { color: 'cyan' }, 'running'),
+      a.pid ? e(Text, { color: 'gray' }, `  pid ${a.pid}`) : null,
+    ]
+  }
+  if (a.state === 'noop') return [e(Text, { color: 'yellow' }, 'no changes')]
+  if (a.state === 'failed') {
+    return [e(Text, { color: 'red' }, a.error || `exit ${a.exitCode}`)]
+  }
+  // done
+  const c = (a.commits || []).length
+  const f = (a.filesChanged || []).length
+  return [
+    e(Text, { color: 'green' }, `${c} commit${c === 1 ? '' : 's'}`),
+    e(Text, { color: 'gray' }, '  '),
+    e(Text, { color: 'yellow' }, `${f} file${f === 1 ? '' : 's'}`),
+    a.autoCommitted ? e(Text, { color: 'gray' }, '  auto') : null,
+  ]
 }
 
 function loadDiff(agent, baseSha) {
@@ -110,7 +127,7 @@ function HRule({ width }) {
 
 // ─── App ────────────────────────────────────────────────────────────────
 
-function App({ state, baseSha, repoName, queueTask }) {
+function App({ state, baseSha, repoName, queueTask, claudeVersion, model }) {
   useTick(1000)
   const agents = useStateAgents(state)
   const [selectedIdx, setSelectedIdx] = useState(0)
@@ -246,21 +263,34 @@ function App({ state, baseSha, repoName, queueTask }) {
   const header = e(
     Box,
     { paddingX: 1, height: 1 },
-    e(Text, { bold: true }, 'agent-farm'),
-    e(Text, { color: 'gray' }, '  ·  base '),
+    e(Text, { bold: true, color: 'magenta' }, 'agent-farm'),
+    e(Text, { color: 'gray' }, '  '),
+    e(Text, { color: 'green' }, '✓'),
+    e(Text, null, ' claude '),
+    e(Text, { color: 'cyan' }, claudeVersion || '?'),
+    e(Text, { color: 'gray' }, '  ·  '),
+    e(Text, { color: 'gray' }, 'model '),
+    e(Text, { color: model ? 'cyan' : 'gray' }, model || 'default'),
+    e(Text, { color: 'gray' }, '  ·  '),
+    e(Text, { color: 'yellow' }, '⚠ skip-perms'),
+    e(Text, { color: 'gray' }, '  ·  '),
     e(Text, null, baseSha.slice(0, 8)),
-    e(Text, { color: 'gray' }, '  ·  repo '),
+    e(Text, { color: 'gray' }, '/'),
     e(Text, null, repoName),
     e(Text, { color: 'gray' }, '   '),
     totals.queued > 0
       ? e(Text, { color: 'gray' }, `${totals.queued} queued  `)
       : null,
     totals.running > 0
-      ? e(Text, { color: 'cyan' }, `${totals.running} running  `)
+      ? e(Text, { color: 'cyan', bold: true }, `${totals.running} running  `)
       : null,
-    totals.done > 0 ? e(Text, { color: 'green' }, `${totals.done} done  `) : null,
+    totals.done > 0
+      ? e(Text, { color: 'green', bold: true }, `${totals.done} done  `)
+      : null,
     totals.noop > 0 ? e(Text, { color: 'yellow' }, `${totals.noop} noop  `) : null,
-    totals.failed > 0 ? e(Text, { color: 'red' }, `${totals.failed} failed`) : null
+    totals.failed > 0
+      ? e(Text, { color: 'red', bold: true }, `${totals.failed} failed`)
+      : null
   )
 
   // ── LEFT panel (worktree list)
@@ -282,6 +312,16 @@ function App({ state, baseSha, repoName, queueTask }) {
             const idDisplay =
               a.id.length > maxIdLen ? a.id.slice(0, maxIdLen - 1) + '…' : a.id
             const elapsed = elapsedFor(a)
+            const elapsedColor =
+              a.state === 'running'
+                ? 'cyan'
+                : a.state === 'done'
+                  ? 'green'
+                  : a.state === 'noop'
+                    ? 'yellow'
+                    : a.state === 'failed'
+                      ? 'red'
+                      : 'gray'
             return e(
               Box,
               { key: a.id, flexDirection: 'column' },
@@ -295,11 +335,13 @@ function App({ state, baseSha, repoName, queueTask }) {
               ),
               e(
                 Text,
-                { color: 'gray' },
+                null,
                 '   ',
-                elapsed,
-                elapsed ? '  ' : '',
-                detailFor(a)
+                elapsed
+                  ? e(Text, { color: elapsedColor }, elapsed)
+                  : null,
+                elapsed ? e(Text, { color: 'gray' }, '  ') : null,
+                ...detailNodes(a)
               )
             )
           })
@@ -338,17 +380,41 @@ function App({ state, baseSha, repoName, queueTask }) {
     } else {
       const idx = Math.max(0, Math.min(fileIdx, diffData.files.length - 1))
       const f = diffData.files[idx]
-      const visible = f.lines.slice(0, Math.max(1, bodyH - 2))
+      // Smart path display: show last 2 segments if path is long
+      const segments = f.name.split('/')
+      const shortPath =
+        f.name.length > truncateRight - 20 && segments.length > 2
+          ? '…/' + segments.slice(-2).join('/')
+          : f.name
+      // File pagination dots: ●●○○○ with current highlighted
+      const dots = diffData.files
+        .map((_, i) => (i === idx ? '●' : '○'))
+        .join('')
+      // Insert blank line before each @@ hunk for breathing room
+      const spacedLines = []
+      for (const line of f.lines.slice(0, Math.max(1, bodyH - 2))) {
+        if (line.startsWith('@@') && spacedLines.length > 0) {
+          spacedLines.push('') // breathing room
+        }
+        spacedLines.push(line)
+        if (spacedLines.length >= bodyH - 2) break
+      }
       right = e(
         Box,
         { paddingX: 1, flexDirection: 'column' },
         e(
-          Text,
-          { color: 'cyan', bold: true },
-          `diff · ${selectedAgent.id} · file ${idx + 1}/${diffData.files.length}: `,
-          e(Text, { color: 'white' }, f.name)
+          Box,
+          null,
+          e(Text, { color: 'cyan', bold: true }, 'diff '),
+          e(Text, { color: 'gray' }, '· '),
+          e(Text, { color: 'cyan' }, selectedAgent.id),
+          e(Text, { color: 'gray' }, '  '),
+          e(Text, { color: 'magenta' }, dots),
+          e(Text, { color: 'gray' }, '  '),
+          e(Text, null, shortPath)
         ),
-        ...visible.map((line, i) => {
+        ...spacedLines.map((line, i) => {
+          if (line === '') return e(Text, { key: i }, '')
           const display =
             line.length > truncateRight ? line.slice(0, truncateRight - 1) + '…' : line
           return e(DiffLine, { key: i, line: display })
@@ -441,9 +507,9 @@ function App({ state, baseSha, repoName, queueTask }) {
   )
 }
 
-function renderTui({ state, baseSha, repoName, queueTask }) {
+function renderTui({ state, baseSha, repoName, queueTask, claudeVersion, model }) {
   const ink = render(
-    e(App, { state, baseSha, repoName, queueTask })
+    e(App, { state, baseSha, repoName, queueTask, claudeVersion, model })
   )
   return ink.waitUntilExit()
 }

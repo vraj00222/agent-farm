@@ -58,6 +58,7 @@ async function runAgent({
   baseSha,
   repoRoot,
   state,
+  model,
 }) {
   const startedAt = Date.now()
   const { logger, filepath: logFile } = loggerFor(repoRoot, id, startedAt)
@@ -67,6 +68,7 @@ async function runAgent({
     branch,
     worktreePath,
     prompt,
+    model: model || null,
     state: 'queued',
     pid: null,
     startedAt: null,
@@ -91,17 +93,35 @@ async function runAgent({
     return state.get(id)
   }
 
-  state.transition(id, 'running', { startedAt })
-  state.appendLine(id, 'info', `spawning claude in ${worktreePath}`)
+  // Build the actual claude command
+  const claudeArgs = ['-p', '--dangerously-skip-permissions']
+  if (model) claudeArgs.push('--model', model)
+  // The wrapped prompt is the last arg
+  const wrappedPrompt = wrapPrompt(prompt)
 
-  const proc = spawn(
-    'claude',
-    ['-p', '--dangerously-skip-permissions', wrapPrompt(prompt)],
-    { cwd: worktreePath, stdio: ['ignore', 'pipe', 'pipe'] }
+  state.transition(id, 'running', { startedAt })
+  // Echo the literal command so the user sees what claude is being asked to do.
+  // Truncate the prompt for visual brevity but keep the flag set verbatim.
+  const promptPreview = prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
+  state.appendLine(
+    id,
+    'info',
+    `$ claude ${claudeArgs.join(' ')} "${promptPreview}"`
   )
+  state.appendLine(id, 'info', `worktree: ${worktreePath}`)
+
+  const proc = spawn('claude', [...claudeArgs, wrappedPrompt], {
+    cwd: worktreePath,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
 
   state.transition(id, 'running', { pid: proc.pid })
-  logger.log('spawn', { pid: proc.pid, worktree: worktreePath, baseSha })
+  logger.log('spawn', {
+    pid: proc.pid,
+    worktree: worktreePath,
+    baseSha,
+    model: model || null,
+  })
 
   const onLine = (kind) => (line) => {
     const clean = stripAnsi(line)
