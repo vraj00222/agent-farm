@@ -4,7 +4,7 @@ agent-farm is a local dev tool. You give it a list of tasks, it spawns a Git Wor
 
 ## status
 
-**v0.0.4 — Ink TUI.** When stdout is a real terminal, agent-farm now renders a split-pane interactive UI: agent list on the left with live state glyphs and ticking elapsed time, output pane on the right that toggles between live tail and a syntax-highlighted diff view. ↑↓ to select, `d` to flip to diff, `[` / `]` to step through changed files, `q` to detach, `Q` to kill all and quit. CI / piped stdout falls back to the plain v0.0.3 log stream automatically. Cherry-pick orchestration arrives in v0.0.5.
+**v0.0.4 — live TUI with embedded prompt input.** A single `agent-farm` command opens a split-pane terminal UI: agent list on the left (state glyphs, live-ticking elapsed), output pane on the right that toggles between tail and a syntax-highlighted diff view, and a Claude-Code-style input box at the bottom. Type a task, press Enter, the agent spawns immediately while existing ones keep running. Side panel is navigable any time, even mid-run. CI / piped stdout falls back to the plain log stream automatically. Cherry-pick orchestration + detach-without-kill arrive in v0.0.5.
 
 ## requirements
 
@@ -26,38 +26,37 @@ npm link
 
 From inside any git repo with a clean tracked tree.
 
-### REPL (default)
+### Open the TUI
 
 ```bash
 agent-farm
 ```
 
-```
-agent-farm REPL — type a prompt per line.
-  run    start the queue with what you have so far
-  drop   discard the last prompt
-  quit   exit without running (Ctrl+D / Ctrl+C also abort)
+The TUI opens with an empty side panel and a prompt box at the bottom. Type a task, press Enter, and an agent spawns in a fresh worktree right away. Type another, press Enter — it spawns in parallel (up to `--max` concurrent; the rest queue automatically). The side panel ticks elapsed times, the right pane shows the selected agent's tail or diff. Navigate at any time:
 
-? task 1 › fix the JWT bug in src/auth/middleware.ts
-? task 2 › @bench: benchmark slugify and write result to BENCH.md
-? task 3 › run
+```
+type & enter   spawn a new task
+esc            clear the input
+↑ / ↓          select agent in the side panel
+tab            cycle  tail → diff(file 1) → diff(file 2) → … → tail
+shift+tab      cycle the other way
+ctrl+c         quit (SIGTERMs running agents)
 ```
 
-### CLI fan-out
+### Pre-load tasks from argv
 
 ```bash
-# one task
 agent-farm "fix the typo in the readme"
 
-# many tasks
 agent-farm \
   "fix the typo in the readme" \
   "add a license header to all .js files in src/" \
   "@bench: benchmark the slugify function and write the result to BENCH.md"
 
-# cap parallelism explicitly (default 3)
-agent-farm --max 2 "p1" "p2" "p3" "p4"   # 2 run, 2 queue
+agent-farm --max 2 "p1" "p2" "p3" "p4"   # 2 run, 2 queue; UI still opens
 ```
+
+These behave identically to typing the prompts in the input box — they're just queued before the TUI mounts so you can watch them all spawn at once.
 
 ### Subcommands
 
@@ -66,19 +65,15 @@ agent-farm status           # print state.json table — works mid-run or after
 agent-farm logs <id>        # render an agent's JSONL run log
 ```
 
-### TUI keybindings
+### Plain log stream (CI / pipes)
 
-When stdout is a TTY (default), the live session renders a split-pane Ink UI:
+When stdout is not a TTY (or `CI=1` / `AGENT_FARM_NO_TUI=1`), the TUI is replaced by tagged log lines (the v0.0.3 visual). Use this for CI runs:
 
-```
-↑↓        select agent
-d         toggle diff view (after agent finishes)
-[ / ]     prev / next file in the diff
-q         quit (running agents stay running until they finish)
-Q         SIGTERM all running agents and quit
+```bash
+AGENT_FARM_NO_TUI=1 agent-farm "p1" "p2" 2>&1 | tee farm.log
 ```
 
-Force the plain log stream renderer (e.g. when redirecting to a file or running in CI) by setting `AGENT_FARM_NO_TUI=1`. Pipes and `CI=1` already trigger this automatically.
+Stream mode requires at least one prompt on argv — there's no input box without a TTY.
 
 Each prompt becomes:
 

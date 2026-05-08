@@ -10,12 +10,10 @@ const {
   c,
   fmtElapsed,
   makeTagger,
-  SUPPORTS_COLOR,
 } = require('./util.js')
 const { runAgent } = require('./runner.js')
 const { State, statePath, runsDir } = require('./state.js')
 const { Semaphore } = require('./queue.js')
-const { runRepl } = require('./repl.js')
 
 const DEFAULT_MAX_CONCURRENT = 3
 
@@ -73,20 +71,21 @@ function printUsage() {
       `${c.bold('agent-farm')} — run claude in isolated git worktrees, in parallel.`,
       '',
       'Usage:',
-      `  agent-farm                                  # interactive REPL → live TUI`,
-      `  agent-farm "<prompt>" ["<prompt>" ...]      # CLI fan-out → live TUI`,
+      `  agent-farm                                  # open the live TUI`,
+      `  agent-farm "<prompt>" ["<prompt>" ...]      # open TUI with these tasks queued`,
       `  agent-farm @<id>: "<prompt>"                # override the slug`,
       `  agent-farm --max <N> "<prompt>" ...         # cap parallelism (default ${DEFAULT_MAX_CONCURRENT})`,
       '',
       `  agent-farm status                           # print current session state`,
       `  agent-farm logs <id>                        # print the JSONL run log for an agent`,
       '',
-      'Live TUI keybindings:',
-      `  ↑↓        select agent`,
-      `  d         toggle diff view (when agent is done)`,
-      `  [ / ]     prev / next file in the diff`,
-      `  q         quit (agents already running keep running)`,
-      `  Q         kill all running agents and quit`,
+      'TUI keybindings:',
+      `  type & enter   spawn a new task`,
+      `  esc            clear the input`,
+      `  ↑ / ↓          select an agent in the side panel`,
+      `  tab            cycle tail → diff (file 1) → diff (file 2) → … → tail`,
+      `  shift+tab      cycle the other way`,
+      `  ctrl+c         quit (running tasks are SIGTERM'd)`,
       '',
       `Set ${c.dim('AGENT_FARM_NO_TUI=1')} to force the plain log-stream renderer.`,
       '',
@@ -167,7 +166,8 @@ function attachStreamRenderer(state, tagWidth) {
 function printStartBanner({ tasks, repoRoot, baseSha, maxConcurrent }) {
   const repoName = path.basename(repoRoot)
   const idWidth = Math.max(...tasks.map((t) => t.id.length))
-  const cap = tasks.length > maxConcurrent ? c.dim(` (max ${maxConcurrent} parallel)`) : ''
+  const cap =
+    tasks.length > maxConcurrent ? c.dim(` (max ${maxConcurrent} parallel)`) : ''
   process.stdout.write('\n')
   process.stdout.write(
     `${c.bold('[agent-farm]')} ${tasks.length} task${tasks.length === 1 ? '' : 's'}${cap} · base ${c.dim(baseSha.slice(0, 8))} · repo ${c.dim(repoName)}\n`
@@ -181,6 +181,7 @@ function printStartBanner({ tasks, repoRoot, baseSha, maxConcurrent }) {
 }
 
 function printSummary(results) {
+  if (results.length === 0) return { wins: 0, losses: 0 }
   const idWidth = Math.max(...results.map((r) => r.id.length), 'id'.length)
   const stateGlyph = {
     done: c.green('✓'),
@@ -200,13 +201,17 @@ function printSummary(results) {
         r.error
           ? r.error
           : `exit ${r.exitCode}` +
-              ((r.commits || []).length > 0 ? ` (${r.commits.length} partial commit(s))` : '')
+              ((r.commits || []).length > 0
+                ? ` (${r.commits.length} partial commit(s))`
+                : '')
       )
     } else if (r.state === 'noop') {
       detail = c.yellow('no changes')
+    } else if (r.state === 'running' || r.state === 'queued') {
+      detail = c.dim('still running at exit')
     } else {
       const auto = r.autoCommitted ? c.dim(' (auto-committed)') : ''
-      detail = `${r.commits.length} commit${r.commits.length === 1 ? '' : 's'} · ${r.filesChanged.length} file${r.filesChanged.length === 1 ? '' : 's'}${auto}`
+      detail = `${(r.commits || []).length} commit${(r.commits || []).length === 1 ? '' : 's'} · ${(r.filesChanged || []).length} file${(r.filesChanged || []).length === 1 ? '' : 's'}${auto}`
     }
     process.stdout.write(
       `  ${glyph} ${c.cyan(idCol)}  ${c.dim(elapsed)}  ${detail}\n`
@@ -228,11 +233,13 @@ function printSummary(results) {
     }
   }
 
-  process.stdout.write(`\n${c.bold('cleanup:')}\n`)
-  for (const r of [...wins, ...losses]) {
-    process.stdout.write(
-      `  git worktree remove "${r.worktreePath}" && git branch -D ${r.branch}\n`
-    )
+  if (results.length > 0) {
+    process.stdout.write(`\n${c.bold('cleanup:')}\n`)
+    for (const r of [...wins, ...losses]) {
+      process.stdout.write(
+        `  git worktree remove "${r.worktreePath}" && git branch -D ${r.branch}\n`
+      )
+    }
   }
   process.stdout.write('\n')
 
@@ -243,7 +250,9 @@ function doStatus() {
   const repoRoot = getRepoRoot()
   const state = State.read(repoRoot)
   if (!state) {
-    process.stdout.write(c.dim('no .agent-farm/state.json — no session has run in this repo yet.\n'))
+    process.stdout.write(
+      c.dim('no .agent-farm/state.json — no session has run in this repo yet.\n')
+    )
     return
   }
   const agents = state.all()
@@ -264,11 +273,17 @@ function doStatus() {
   )
   for (const a of agents) {
     const colorFn = stateColor[a.state] || ((s) => s)
-    const elapsed = a.elapsedMs ? fmtElapsed(a.elapsedMs) : a.startedAt ? `${fmtElapsed(Date.now() - a.startedAt)}+` : '-'
+    const elapsed = a.elapsedMs
+      ? fmtElapsed(a.elapsedMs)
+      : a.startedAt
+        ? `${fmtElapsed(Date.now() - a.startedAt)}+`
+        : '-'
     const detail =
       a.state === 'done' || a.state === 'failed' || a.state === 'noop'
         ? `${(a.commits || []).length}c · ${(a.filesChanged || []).length}f`
-        : (a.pid ? `pid ${a.pid}` : '')
+        : a.pid
+          ? `pid ${a.pid}`
+          : ''
     process.stdout.write(
       `  ${colorFn(a.state.padEnd(7))}  ${c.cyan(a.id.padEnd(idWidth))}  ${c.dim(elapsed.padStart(8))}  ${c.dim(detail)}\n`
     )
@@ -324,18 +339,6 @@ function doLogs(id) {
   }
 }
 
-function killAllAgents(state) {
-  for (const a of state.all()) {
-    if (a.pid && a.state === 'running') {
-      try {
-        process.kill(a.pid, 'SIGTERM')
-      } catch {
-        /* already dead */
-      }
-    }
-  }
-}
-
 async function run(argv) {
   let args
   try {
@@ -357,66 +360,103 @@ async function run(argv) {
   const repoRoot = getRepoRoot()
   checkRepoClean(repoRoot)
   const baseSha = git(['rev-parse', 'HEAD'], repoRoot)
+  const repoName = path.basename(repoRoot)
 
-  let prompts = args.prompts.filter((a) => a.trim().length > 0)
-  if (prompts.length === 0) {
-    prompts = await runRepl()
-    if (prompts.length === 0) return
-  }
-
-  const taken = new Set()
-  const tasks = prompts.map((prompt) => {
-    const baseId = slugify(prompt)
-    const slug = uniqueSlug(repoRoot, baseId, taken)
-    return { prompt, ...slug }
-  })
-
-  const maxConcurrent = Math.min(args.max, tasks.length)
-  const state = State.init({ repoRoot, baseSha, maxConcurrent })
-  const tagWidth = Math.max(...tasks.map((t) => t.id.length))
-
+  const initialPrompts = args.prompts.filter((p) => p.trim().length > 0)
   const tuiMode = isInteractive()
-  let tuiPromise = null
 
-  if (tuiMode) {
-    // Lazy-require Ink so non-TTY environments don't pay the import cost
-    const { renderTui } = require('./ui.js')
-    tuiPromise = renderTui({
-      state,
-      baseSha,
-      repoName: path.basename(repoRoot),
-      attached: false,
-      onKillAll: () => killAllAgents(state),
-    })
-  } else {
-    printStartBanner({ tasks, repoRoot, baseSha, maxConcurrent })
-    attachStreamRenderer(state, tagWidth)
+  // Stream mode requires at least one initial prompt — there's no input box.
+  if (!tuiMode && initialPrompts.length === 0) {
+    process.stderr.write(
+      'agent-farm: no TTY detected and no prompts given. Pass prompts as args, or run in a real terminal for the TUI.\n'
+    )
+    process.exit(1)
   }
 
-  const sema = new Semaphore(maxConcurrent)
+  const state = State.init({ repoRoot, baseSha, maxConcurrent: args.max })
+  const sema = new Semaphore(args.max)
+  const takenIds = new Set()
+  const pendingTasks = []
+  const queuePromises = []
 
-  const results = await Promise.all(
-    tasks.map((t) =>
-      sema.run(() =>
+  const queueTask = (prompt) => {
+    const baseId = slugify(prompt)
+    const slug = uniqueSlug(repoRoot, baseId, takenIds)
+    pendingTasks.push(slug.id)
+    const p = sema
+      .run(() =>
         runAgent({
-          prompt: t.prompt,
-          id: t.id,
-          branch: t.branch,
-          worktreePath: t.worktreePath,
+          prompt,
+          id: slug.id,
+          branch: slug.branch,
+          worktreePath: slug.worktreePath,
           baseSha,
           repoRoot,
           state,
         })
       )
-    )
-  )
-
-  if (tuiPromise) {
-    // Wait for user to press q (Ink unmounts), then print summary to scrollback
-    await tuiPromise
+      .catch((e) => {
+        // runAgent handles its own errors; this is for runner crashes
+        try {
+          state.appendLine(slug.id, 'stderr', `runner crashed: ${e.message}`)
+        } catch {
+          /* ignore */
+        }
+      })
+    queuePromises.push(p)
+    return slug.id
   }
 
-  const { wins, losses } = printSummary(results)
+  if (tuiMode) {
+    // TUI takes over — initial prompts are queued, then user can submit more.
+    for (const p of initialPrompts) queueTask(p)
+    const { renderTui } = require('./ui.js')
+    await renderTui({
+      state,
+      baseSha,
+      repoName,
+      queueTask,
+    })
+    // After Ink unmounts, child processes may still be running — wait for them
+    // briefly so state.json reflects final outcomes before printSummary reads it.
+    await Promise.race([
+      Promise.all(queuePromises),
+      new Promise((r) => setTimeout(r, 200)),
+    ])
+  } else {
+    // Stream mode: print banner, attach stream renderer, run, await, print summary.
+    const tasks = initialPrompts.map((prompt) => {
+      const baseId = slugify(prompt)
+      return { prompt, ...uniqueSlug(repoRoot, baseId, new Set()) }
+    })
+    const tagWidth = Math.max(...tasks.map((t) => t.id.length))
+    printStartBanner({
+      tasks,
+      repoRoot,
+      baseSha,
+      maxConcurrent: Math.min(args.max, tasks.length),
+    })
+    attachStreamRenderer(state, tagWidth)
+    for (const t of tasks) {
+      takenIds.add(t.id)
+      queuePromises.push(
+        sema.run(() =>
+          runAgent({
+            prompt: t.prompt,
+            id: t.id,
+            branch: t.branch,
+            worktreePath: t.worktreePath,
+            baseSha,
+            repoRoot,
+            state,
+          })
+        )
+      )
+    }
+    await Promise.all(queuePromises)
+  }
+
+  const { wins, losses } = printSummary(state.all())
 
   process.stdout.write(c.dim(`state: ${statePath(repoRoot)}\n`))
   process.stdout.write(c.dim(`logs:  ${runsDir(repoRoot)}\n\n`))

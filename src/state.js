@@ -85,8 +85,11 @@ class State extends EventEmitter {
     a.lastLines = a.lastLines || []
     a.lastLines.push(line)
     if (a.lastLines.length > 5) a.lastLines.shift()
-    // Don't flush state.json on every line — too noisy. Just emit for live UI.
+    // Don't flush state.json on every line — too noisy.
     this.emit('line', { id, kind, line })
+    // Also fire 'change' so subscribers (TUI / stream renderer) re-render
+    // with the latest lastLines. State.json is not rewritten here.
+    this.emit('change', { id, kind: 'line' })
   }
 
   get(id) {
