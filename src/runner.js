@@ -1,14 +1,7 @@
 'use strict'
 
 const { execFileSync, spawn } = require('child_process')
-const {
-  git,
-  c,
-  makeTagger,
-  stripAnsi,
-  lineBuffer,
-  fmtElapsed,
-} = require('./util.js')
+const { git, stripAnsi, lineBuffer, fmtElapsed } = require('./util.js')
 const { loggerFor } = require('./logger.js')
 
 function wrapPrompt(prompt) {
@@ -64,15 +57,8 @@ async function runAgent({
   worktreePath,
   baseSha,
   repoRoot,
-  tagWidth,
   state,
-  out,
-  err,
 }) {
-  const tag = makeTagger(id, tagWidth)
-  const writeOut = (line) => out.write(`${tag(line)}\n`)
-  const writeErr = (line) => err.write(`${tag(line)}\n`)
-
   const startedAt = Date.now()
   const { logger, filepath: logFile } = loggerFor(repoRoot, id, startedAt)
 
@@ -94,21 +80,19 @@ async function runAgent({
     logFile,
   })
 
-  const result = state.get(id)
-
   try {
     git(['worktree', 'add', worktreePath, '-b', branch], repoRoot)
   } catch (e) {
     const errMsg = `worktree create failed: ${e.message.split('\n')[0]}`
-    state.transition(id, 'failed', { error: errMsg })
+    state.appendLine(id, 'stderr', errMsg)
+    state.transition(id, 'failed', { error: errMsg, endedAt: Date.now(), elapsedMs: Date.now() - startedAt })
     logger.log('error', { message: errMsg })
     logger.close()
-    writeErr(c.red(errMsg))
     return state.get(id)
   }
 
   state.transition(id, 'running', { startedAt })
-  writeOut(c.dim(`spawning claude in ${worktreePath}`))
+  state.appendLine(id, 'info', `spawning claude in ${worktreePath}`)
 
   const proc = spawn(
     'claude',
@@ -119,25 +103,22 @@ async function runAgent({
   state.transition(id, 'running', { pid: proc.pid })
   logger.log('spawn', { pid: proc.pid, worktree: worktreePath, baseSha })
 
-  const lastLines = []
-  const onLine = (kind, sink) => (line) => {
+  const onLine = (kind) => (line) => {
     const clean = stripAnsi(line)
     if (clean.length === 0) return
-    sink(clean)
+    state.appendLine(id, kind, clean)
     logger.log(kind, { line: clean })
-    lastLines.push(clean)
-    if (lastLines.length > 5) lastLines.shift()
   }
 
-  const stdoutBuf = lineBuffer(onLine('stdout', writeOut))
-  const stderrBuf = lineBuffer(onLine('stderr', writeErr))
+  const stdoutBuf = lineBuffer(onLine('stdout'))
+  const stderrBuf = lineBuffer(onLine('stderr'))
   proc.stdout.on('data', stdoutBuf.push)
   proc.stderr.on('data', stderrBuf.push)
 
   const exitCode = await new Promise((resolve) => {
     proc.on('exit', (code) => resolve(code === null ? 128 : code))
     proc.on('error', (e) => {
-      writeErr(c.red(`spawn error: ${e.message}`))
+      state.appendLine(id, 'stderr', `spawn error: ${e.message}`)
       logger.log('error', { message: e.message })
       resolve(127)
     })
@@ -151,17 +132,16 @@ async function runAgent({
   if (exitCode !== 0) {
     const commits = commitsSince(worktreePath, baseSha)
     const filesChanged = filesChangedSince(worktreePath, baseSha)
+    state.appendLine(id, 'info', `claude exited ${exitCode} after ${fmtElapsed(elapsedMs)}`)
     state.transition(id, 'failed', {
       exitCode,
       endedAt,
       elapsedMs,
       commits,
       filesChanged,
-      lastLines: [...lastLines],
     })
     logger.log('exit', { code: exitCode, elapsedMs, commits: commits.length })
     logger.close()
-    writeErr(c.red(`claude exited ${exitCode} after ${fmtElapsed(elapsedMs)}`))
     return state.get(id)
   }
 
@@ -171,19 +151,18 @@ async function runAgent({
       autoCommit(worktreePath, id)
       autoCommitted = true
       logger.log('autocommit', {})
-      writeOut(c.dim(`auto-committed pending changes`))
+      state.appendLine(id, 'info', `auto-committed pending changes`)
     } catch (e) {
       const errMsg = `auto-commit failed: ${e.message.split('\n')[0]}`
+      state.appendLine(id, 'stderr', errMsg)
       state.transition(id, 'failed', {
         exitCode,
         endedAt,
         elapsedMs,
         error: errMsg,
-        lastLines: [...lastLines],
       })
       logger.log('error', { message: errMsg })
       logger.close()
-      writeErr(c.red(errMsg))
       return state.get(id)
     }
   }
@@ -192,6 +171,12 @@ async function runAgent({
   const filesChanged = filesChangedSince(worktreePath, baseSha)
   const finalState = commits.length > 0 ? 'done' : 'noop'
 
+  const summary =
+    finalState === 'done'
+      ? `done in ${fmtElapsed(elapsedMs)} · ${commits.length} commit${commits.length === 1 ? '' : 's'} · ${filesChanged.length} file${filesChanged.length === 1 ? '' : 's'}`
+      : `no-op in ${fmtElapsed(elapsedMs)} (claude made no changes)`
+  state.appendLine(id, 'info', summary)
+
   state.transition(id, finalState, {
     exitCode,
     endedAt,
@@ -199,7 +184,6 @@ async function runAgent({
     commits,
     filesChanged,
     autoCommitted,
-    lastLines: [...lastLines],
   })
   logger.log('exit', {
     code: exitCode,
@@ -209,14 +193,6 @@ async function runAgent({
     state: finalState,
   })
   logger.close()
-
-  const summary =
-    finalState === 'done'
-      ? c.green(
-          `done in ${fmtElapsed(elapsedMs)} · ${commits.length} commit${commits.length === 1 ? '' : 's'} · ${filesChanged.length} file${filesChanged.length === 1 ? '' : 's'}`
-        )
-      : c.yellow(`no-op in ${fmtElapsed(elapsedMs)} (claude made no changes)`)
-  writeOut(summary)
 
   return state.get(id)
 }

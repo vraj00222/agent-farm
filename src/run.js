@@ -3,7 +3,15 @@
 const path = require('path')
 const fs = require('fs')
 const { execFileSync } = require('child_process')
-const { slugify, git, uniqueSlug, c, fmtElapsed } = require('./util.js')
+const {
+  slugify,
+  git,
+  uniqueSlug,
+  c,
+  fmtElapsed,
+  makeTagger,
+  SUPPORTS_COLOR,
+} = require('./util.js')
 const { runAgent } = require('./runner.js')
 const { State, statePath, runsDir } = require('./state.js')
 const { Semaphore } = require('./queue.js')
@@ -49,24 +57,38 @@ function getRepoRoot() {
   }
 }
 
+function isInteractive() {
+  return (
+    process.stdout.isTTY &&
+    process.stdin.isTTY &&
+    process.env.TERM !== 'dumb' &&
+    !process.env.AGENT_FARM_NO_TUI &&
+    !process.env.CI
+  )
+}
+
 function printUsage() {
   process.stdout.write(
     [
       `${c.bold('agent-farm')} — run claude in isolated git worktrees, in parallel.`,
       '',
       'Usage:',
-      `  agent-farm                                  # interactive REPL`,
-      `  agent-farm "<prompt>" ["<prompt>" ...]      # CLI fan-out`,
+      `  agent-farm                                  # interactive REPL → live TUI`,
+      `  agent-farm "<prompt>" ["<prompt>" ...]      # CLI fan-out → live TUI`,
       `  agent-farm @<id>: "<prompt>"                # override the slug`,
       `  agent-farm --max <N> "<prompt>" ...         # cap parallelism (default ${DEFAULT_MAX_CONCURRENT})`,
       '',
       `  agent-farm status                           # print current session state`,
       `  agent-farm logs <id>                        # print the JSONL run log for an agent`,
       '',
-      'Each prompt becomes:',
-      `  - branch:   agent/<id>`,
-      `  - worktree: ../<repo>-<id>/    (sibling, off your current HEAD)`,
-      `  - process:  claude -p --dangerously-skip-permissions <wrapped prompt>`,
+      'Live TUI keybindings:',
+      `  ↑↓        select agent`,
+      `  d         toggle diff view (when agent is done)`,
+      `  [ / ]     prev / next file in the diff`,
+      `  q         quit (agents already running keep running)`,
+      `  Q         kill all running agents and quit`,
+      '',
+      `Set ${c.dim('AGENT_FARM_NO_TUI=1')} to force the plain log-stream renderer.`,
       '',
     ].join('\n') + '\n'
   )
@@ -127,6 +149,19 @@ function parseArgs(argv) {
   }
 
   return out
+}
+
+function attachStreamRenderer(state, tagWidth) {
+  const taggers = new Map()
+  const taggerFor = (id) => {
+    if (!taggers.has(id)) taggers.set(id, makeTagger(id, tagWidth))
+    return taggers.get(id)
+  }
+  state.on('line', ({ id, kind, line }) => {
+    const tag = taggerFor(id)
+    const sink = kind === 'stderr' ? process.stderr : process.stdout
+    sink.write(`${tag(line)}\n`)
+  })
 }
 
 function printStartBanner({ tasks, repoRoot, baseSha, maxConcurrent }) {
@@ -289,6 +324,18 @@ function doLogs(id) {
   }
 }
 
+function killAllAgents(state) {
+  for (const a of state.all()) {
+    if (a.pid && a.state === 'running') {
+      try {
+        process.kill(a.pid, 'SIGTERM')
+      } catch {
+        /* already dead */
+      }
+    }
+  }
+}
+
 async function run(argv) {
   let args
   try {
@@ -326,9 +373,26 @@ async function run(argv) {
 
   const maxConcurrent = Math.min(args.max, tasks.length)
   const state = State.init({ repoRoot, baseSha, maxConcurrent })
-
-  printStartBanner({ tasks, repoRoot, baseSha, maxConcurrent })
   const tagWidth = Math.max(...tasks.map((t) => t.id.length))
+
+  const tuiMode = isInteractive()
+  let tuiPromise = null
+
+  if (tuiMode) {
+    // Lazy-require Ink so non-TTY environments don't pay the import cost
+    const { renderTui } = require('./ui.js')
+    tuiPromise = renderTui({
+      state,
+      baseSha,
+      repoName: path.basename(repoRoot),
+      attached: false,
+      onKillAll: () => killAllAgents(state),
+    })
+  } else {
+    printStartBanner({ tasks, repoRoot, baseSha, maxConcurrent })
+    attachStreamRenderer(state, tagWidth)
+  }
+
   const sema = new Semaphore(maxConcurrent)
 
   const results = await Promise.all(
@@ -341,14 +405,16 @@ async function run(argv) {
           worktreePath: t.worktreePath,
           baseSha,
           repoRoot,
-          tagWidth,
           state,
-          out: process.stdout,
-          err: process.stderr,
         })
       )
     )
   )
+
+  if (tuiPromise) {
+    // Wait for user to press q (Ink unmounts), then print summary to scrollback
+    await tuiPromise
+  }
 
   const { wins, losses } = printSummary(results)
 

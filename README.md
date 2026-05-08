@@ -4,7 +4,7 @@ agent-farm is a local dev tool. You give it a list of tasks, it spawns a Git Wor
 
 ## status
 
-**v0.0.3 — REPL + state + queue.** Run `agent-farm` with no args to drop into an interactive prompt loop, type tasks one per line, then `run` to fan them out. A real maxConcurrent queue (default 3) gates parallelism. Every transition is recorded in `.agent-farm/state.json`; every agent gets a JSONL run log under `.agent-farm/runs/`. New subcommands: `agent-farm status` and `agent-farm logs <id>`. Ink TUI is next (v0.0.4).
+**v0.0.4 — Ink TUI.** When stdout is a real terminal, agent-farm now renders a split-pane interactive UI: agent list on the left with live state glyphs and ticking elapsed time, output pane on the right that toggles between live tail and a syntax-highlighted diff view. ↑↓ to select, `d` to flip to diff, `[` / `]` to step through changed files, `q` to detach, `Q` to kill all and quit. CI / piped stdout falls back to the plain v0.0.3 log stream automatically. Cherry-pick orchestration arrives in v0.0.5.
 
 ## requirements
 
@@ -65,6 +65,20 @@ agent-farm --max 2 "p1" "p2" "p3" "p4"   # 2 run, 2 queue
 agent-farm status           # print state.json table — works mid-run or after
 agent-farm logs <id>        # render an agent's JSONL run log
 ```
+
+### TUI keybindings
+
+When stdout is a TTY (default), the live session renders a split-pane Ink UI:
+
+```
+↑↓        select agent
+d         toggle diff view (after agent finishes)
+[ / ]     prev / next file in the diff
+q         quit (running agents stay running until they finish)
+Q         SIGTERM all running agents and quit
+```
+
+Force the plain log stream renderer (e.g. when redirecting to a file or running in CI) by setting `AGENT_FARM_NO_TUI=1`. Pipes and `CI=1` already trigger this automatically.
 
 Each prompt becomes:
 
@@ -139,7 +153,7 @@ your-repo/
 | v0.0.1 ✓ | single-task spike |
 | v0.0.2 ✓ | N parallel tasks, tagged interleaved logs, hybrid commit, summary + cleanup |
 | v0.0.3 ✓ | REPL input, `.agent-farm/state.json`, queue with maxConcurrent, `status` + `logs` subcommands |
-| v0.0.4 | Ink split-pane TUI |
-| v0.0.5 | cherry-pick orchestration + conflict pause |
+| v0.0.4 ✓ | Ink split-pane TUI, diff view, plain-stream fallback for CI |
+| v0.0.5 | cherry-pick orchestration + conflict pause + `agent-farm attach` |
 | v0.0.6 | `--tasks tasks.json`, `clean`, `kill`, `retry`, history |
 | v0.1.0 | tag, publish, write the launch post |

@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const { EventEmitter } = require('events')
 
 const STATE_VERSION = 1
 
@@ -27,8 +28,9 @@ function atomicWrite(filepath, contents) {
   fs.renameSync(tmp, filepath)
 }
 
-class State {
+class State extends EventEmitter {
   constructor(repoRoot, data) {
+    super()
     this.repoRoot = repoRoot
     this.data = data
   }
@@ -64,6 +66,7 @@ class State {
   putAgent(agent) {
     this.data.agents[agent.id] = { ...agent }
     this.flush()
+    this.emit('change', { id: agent.id, kind: 'put' })
   }
 
   transition(id, newState, patch = {}) {
@@ -72,7 +75,18 @@ class State {
     a.state = newState
     Object.assign(a, patch)
     this.flush()
+    this.emit('change', { id, kind: 'transition', state: newState })
     return a
+  }
+
+  appendLine(id, kind, line) {
+    const a = this.data.agents[id]
+    if (!a) return
+    a.lastLines = a.lastLines || []
+    a.lastLines.push(line)
+    if (a.lastLines.length > 5) a.lastLines.shift()
+    // Don't flush state.json on every line — too noisy. Just emit for live UI.
+    this.emit('line', { id, kind, line })
   }
 
   get(id) {
