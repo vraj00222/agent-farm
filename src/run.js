@@ -234,7 +234,20 @@ function printSummary(results) {
       detail = c.dim('still running at exit')
     } else {
       const auto = r.autoCommitted ? c.dim(' (auto-committed)') : ''
-      detail = `${(r.commits || []).length} commit${(r.commits || []).length === 1 ? '' : 's'} · ${(r.filesChanged || []).length} file${(r.filesChanged || []).length === 1 ? '' : 's'}${auto}`
+      let usage = ''
+      if (r.usage && r.usage.cost != null) {
+        const u = r.usage.usage || {}
+        const inTok =
+          (u.input_tokens || 0) +
+          (u.cache_read_input_tokens || 0) +
+          (u.cache_creation_input_tokens || 0)
+        const outTok = u.output_tokens || 0
+        const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`)
+        usage = c.dim(
+          ` · ${fmt(inTok)} in / ${fmt(outTok)} out · $${r.usage.cost.toFixed(4)}`
+        )
+      }
+      detail = `${(r.commits || []).length} commit${(r.commits || []).length === 1 ? '' : 's'} · ${(r.filesChanged || []).length} file${(r.filesChanged || []).length === 1 ? '' : 's'}${auto}${usage}`
     }
     process.stdout.write(
       `  ${glyph} ${c.cyan(idCol)}  ${c.dim(elapsed)}  ${detail}\n`

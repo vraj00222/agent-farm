@@ -3,6 +3,7 @@
 const { execFileSync, spawn } = require('child_process')
 const { git, stripAnsi, lineBuffer, fmtElapsed } = require('./util.js')
 const { loggerFor } = require('./logger.js')
+const { parseEvent } = require('./streamparser.js')
 
 function wrapPrompt(prompt) {
   return `${prompt}
@@ -93,21 +94,27 @@ async function runAgent({
     return state.get(id)
   }
 
-  // Build the actual claude command
-  const claudeArgs = ['-p', '--dangerously-skip-permissions']
+  // Build the actual claude command. We use stream-json + verbose so we get
+  // structured events (tool_use, tool_result, assistant text, final result)
+  // that we can render as a clean, informative tail in the TUI.
+  const claudeArgs = [
+    '-p',
+    '--dangerously-skip-permissions',
+    '--output-format',
+    'stream-json',
+    '--verbose',
+  ]
   if (model) claudeArgs.push('--model', model)
-  // The wrapped prompt is the last arg
   const wrappedPrompt = wrapPrompt(prompt)
 
   state.transition(id, 'running', { startedAt })
-  // Echo the literal command so the user sees what claude is being asked to do.
-  // Truncate the prompt for visual brevity but keep the flag set verbatim.
+  // Echo a readable command (without the noisy stream-json flags) so the
+  // user sees what claude is being asked to do.
   const promptPreview = prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
-  state.appendLine(
-    id,
-    'info',
-    `$ claude ${claudeArgs.join(' ')} "${promptPreview}"`
-  )
+  const visibleCmd = ['$ claude -p --dangerously-skip-permissions']
+  if (model) visibleCmd.push(`--model ${model}`)
+  visibleCmd.push(`"${promptPreview}"`)
+  state.appendLine(id, 'info', visibleCmd.join(' '))
   state.appendLine(id, 'info', `worktree: ${worktreePath}`)
 
   const proc = spawn('claude', [...claudeArgs, wrappedPrompt], {
@@ -123,15 +130,40 @@ async function runAgent({
     model: model || null,
   })
 
-  const onLine = (kind) => (line) => {
-    const clean = stripAnsi(line)
-    if (clean.length === 0) return
-    state.appendLine(id, kind, clean)
-    logger.log(kind, { line: clean })
+  let capturedUsage = null
+
+  const onStdoutLine = (line) => {
+    if (!line) return
+    // Try to parse as a stream-json event. Fall back to raw text on parse
+    // error so we never silently lose claude output.
+    let event
+    try {
+      event = JSON.parse(line)
+    } catch {
+      const clean = stripAnsi(line)
+      if (clean.length > 0) {
+        state.appendLine(id, 'stdout', clean)
+        logger.log('stdout', { line: clean })
+      }
+      return
+    }
+    const { lines, usage } = parseEvent(event)
+    if (usage) capturedUsage = usage
+    for (const text of lines) {
+      state.appendLine(id, 'event', text)
+      logger.log('event', { eventType: event.type, text })
+    }
   }
 
-  const stdoutBuf = lineBuffer(onLine('stdout'))
-  const stderrBuf = lineBuffer(onLine('stderr'))
+  const onStderrLine = (line) => {
+    const clean = stripAnsi(line)
+    if (clean.length === 0) return
+    state.appendLine(id, 'stderr', clean)
+    logger.log('stderr', { line: clean })
+  }
+
+  const stdoutBuf = lineBuffer(onStdoutLine)
+  const stderrBuf = lineBuffer(onStderrLine)
   proc.stdout.on('data', stdoutBuf.push)
   proc.stderr.on('data', stderrBuf.push)
 
@@ -159,8 +191,14 @@ async function runAgent({
       elapsedMs,
       commits,
       filesChanged,
+      usage: capturedUsage,
     })
-    logger.log('exit', { code: exitCode, elapsedMs, commits: commits.length })
+    logger.log('exit', {
+      code: exitCode,
+      elapsedMs,
+      commits: commits.length,
+      usage: capturedUsage,
+    })
     logger.close()
     return state.get(id)
   }
@@ -204,6 +242,7 @@ async function runAgent({
     commits,
     filesChanged,
     autoCommitted,
+    usage: capturedUsage,
   })
   logger.log('exit', {
     code: exitCode,
@@ -211,6 +250,7 @@ async function runAgent({
     commits: commits.length,
     autoCommitted,
     state: finalState,
+    usage: capturedUsage,
   })
   logger.close()
 

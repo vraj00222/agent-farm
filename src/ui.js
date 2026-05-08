@@ -66,12 +66,18 @@ function detailNodes(a) {
   // done
   const c = (a.commits || []).length
   const f = (a.filesChanged || []).length
-  return [
-    e(Text, { color: 'green' }, `${c} commit${c === 1 ? '' : 's'}`),
+  const nodes = [
+    e(Text, { color: 'green' }, `${c}c`),
     e(Text, { color: 'gray' }, '  '),
-    e(Text, { color: 'yellow' }, `${f} file${f === 1 ? '' : 's'}`),
-    a.autoCommitted ? e(Text, { color: 'gray' }, '  auto') : null,
+    e(Text, { color: 'yellow' }, `${f}f`),
   ]
+  if (a.autoCommitted) {
+    nodes.push(e(Text, { color: 'gray' }, '  auto'))
+  }
+  if (a.usage && a.usage.cost != null) {
+    nodes.push(e(Text, { color: 'gray' }, `  $${a.usage.cost.toFixed(3)}`))
+  }
+  return nodes
 }
 
 function loadDiff(agent, baseSha) {

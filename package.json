@@ -1,6 +1,6 @@
 {
   "name": "agent-farm",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Run Claude Code in parallel across isolated git worktrees, then cherry-pick the wins.",
   "bin": {
     "agent-farm": "./bin/agent-farm.js"
