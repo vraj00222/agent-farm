@@ -4,6 +4,7 @@ import { AgentList } from './components/AgentList'
 import { MainPanel } from './components/MainPanel'
 import { PromptBar } from './components/PromptBar'
 import { StatusStrip } from './components/StatusStrip'
+import { WelcomeScreen } from './components/WelcomeScreen'
 import type { Agent, SessionMeta } from './types/agent'
 
 declare global {
@@ -23,9 +24,8 @@ const SAMPLE_META: SessionMeta = {
   model: null,
 }
 
-// Seeded with one running and one done agent so the design language is
-// fully visible the moment the window opens. These get replaced with
-// real state once the IPC layer lands.
+// Sample agents seeded only when the user picks "Quick start" — proves the
+// design language end-to-end without requiring a real project to be loaded.
 const SAMPLE_AGENTS: Agent[] = [
   {
     id: 'teach-me-how-use',
@@ -50,7 +50,7 @@ const SAMPLE_AGENTS: Agent[] = [
       '→ Read    /Users/v/Developer/404museum-teach-me-how-use/vercel.json',
       '← 1   { ... (+5 lines)',
       '→ Read    /Users/v/Developer/404museum-teach-me-how-use/src/index.ts',
-      '← 1   // 404 Museum — Main entry point ... (+617 lines)',
+      '← 1   // 404 Museum, Main entry point ... (+617 lines)',
       '→ Glob    src/**/*.ts',
     ],
     usage: null,
@@ -76,7 +76,7 @@ const SAMPLE_AGENTS: Agent[] = [
       '→ Write   /Users/v/Developer/404museum-create-foo-md-file/foo.md',
       '← File created successfully',
       '→ Bash    $ git add -A && git commit -m "docs: add foo.md with a short note on le…',
-      '← [agent/create-foo-md-file 058aaec] docs: add foo.md with a short note… (+2 lines)',
+      '← [agent/create-foo-md-file 058aaec] docs: add foo.md with a short note... (+2 lines)',
       'Created foo.md with two lines about legos and committed as 058aaec on agent/create-foo-md-file.',
       '✓ 3 turns · 120.3K in / 469 out · $0.1954 · 10.8s',
       'done in 12.7s · 1 commit · 1 file',
@@ -90,9 +90,70 @@ const SAMPLE_AGENTS: Agent[] = [
   },
 ]
 
+type AppView =
+  | { kind: 'welcome' }
+  | { kind: 'session'; meta: SessionMeta; agents: Agent[]; selectedId: string | null }
+
 export function App() {
-  const [agents, setAgents] = useState<Agent[]>(SAMPLE_AGENTS)
-  const [selectedId, setSelectedId] = useState<string | null>(SAMPLE_AGENTS[0]?.id ?? null)
+  const [view, setView] = useState<AppView>({ kind: 'welcome' })
+
+  const platform = window.agentFarm?.platform ?? 'browser'
+
+  // ── Welcome screen ───────────────────────────────────────────────
+  if (view.kind === 'welcome') {
+    return (
+      <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
+        <header
+          className="drag flex items-center justify-end
+                     bg-bone dark:bg-coal
+                     border-b border-line dark:border-line-dark px-4"
+          style={{ height: 'var(--titlebar-h)', paddingLeft: 90 }}
+        >
+          <span className="font-mono text-[10px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
+            agent farm  ·  v{__APP_VERSION__}
+          </span>
+        </header>
+
+        <main className="flex-1 overflow-hidden">
+          <WelcomeScreen
+            onOpenLocal={() => {
+              // TODO: wire to main process: dialog.showOpenDialog
+              alert('Open project: file picker arrives once IPC lands.')
+            }}
+            onOpenGitHub={() => {
+              // TODO: wire to main process: clone modal
+              alert('Open GitHub project: clone flow arrives once IPC lands.')
+            }}
+            onQuickStart={() =>
+              setView({
+                kind: 'session',
+                meta: SAMPLE_META,
+                agents: SAMPLE_AGENTS,
+                selectedId: SAMPLE_AGENTS[0]?.id ?? null,
+              })
+            }
+          />
+        </main>
+
+        <StatusStrip platform={platform} message="welcome" />
+      </div>
+    )
+  }
+
+  // ── Active session ──────────────────────────────────────────────
+  return <SessionView view={view} setView={setView} platform={platform} />
+}
+
+function SessionView({
+  view,
+  setView,
+  platform,
+}: {
+  view: { kind: 'session'; meta: SessionMeta; agents: Agent[]; selectedId: string | null }
+  setView: (v: AppView) => void
+  platform: string
+}) {
+  const { meta, agents, selectedId } = view
 
   const totals = useMemo(
     () =>
@@ -112,9 +173,6 @@ export function App() {
   )
 
   const handleSubmit = (prompt: string) => {
-    // Stub: pretend to spawn an agent. Real spawn lands once the IPC +
-    // runner are wired up. For now this proves the input → list update
-    // path works.
     const id = slugify(prompt)
     const next: Agent = {
       id,
@@ -130,26 +188,30 @@ export function App() {
       commits: [],
       filesChanged: [],
       autoCommitted: false,
-      lastLines: [`$ claude -p --dangerously-skip-permissions "${prompt}"`, '(stub: IPC not yet wired)'],
+      lastLines: [
+        `$ claude -p --dangerously-skip-permissions "${prompt}"`,
+        '(stub: IPC not yet wired)',
+      ],
       usage: null,
     }
-    setAgents((prev) => [...prev, next])
-    setSelectedId(id)
+    setView({
+      ...view,
+      agents: [...agents, next],
+      selectedId: id,
+    })
   }
 
-  const platform = window.agentFarm?.platform ?? 'browser'
+  const handleSelect = (id: string) => {
+    setView({ ...view, selectedId: id })
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
-      <TitleBar meta={SAMPLE_META} totals={totals} />
+      <TitleBar meta={meta} totals={totals} />
 
       <div className="flex-1 grid grid-cols-[17rem_1fr] min-h-0">
         <aside className="border-r border-line dark:border-line-dark overflow-y-auto bg-bone dark:bg-coal">
-          <AgentList
-            agents={agents}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
+          <AgentList agents={agents} selectedId={selectedId} onSelect={handleSelect} />
         </aside>
 
         <main className="overflow-hidden bg-bone dark:bg-coal">
@@ -182,3 +244,5 @@ function slugify(prompt: string): string {
     .join('-')
   return slug || 'task'
 }
+
+declare const __APP_VERSION__: string

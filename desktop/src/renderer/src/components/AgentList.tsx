@@ -67,6 +67,9 @@ function Row({
   selected: boolean
   onClick: () => void
 }) {
+  // Selected = subtle bg tint + bolder weight on the title.
+  // No full color inversion, no side-stripe (banned).
+  // The row itself stays in the canvas's color world.
   return (
     <button
       type="button"
@@ -74,16 +77,14 @@ function Row({
       className={clsx(
         'row-base group flex items-start gap-3 rounded-md px-2.5 py-2.5',
         selected
-          ? 'bg-ink-900 text-bone dark:bg-chalk dark:text-coal'
-          : 'hover:bg-bone-raised dark:hover:bg-coal-raised'
+          ? 'bg-ink-900/[0.05] dark:bg-chalk/[0.07]'
+          : 'hover:bg-ink-900/[0.025] dark:hover:bg-chalk/[0.04]'
       )}
     >
       <span
         className={clsx(
-          'num w-6 pt-[3px] text-[10.5px] font-mono tabular-nums',
-          selected
-            ? 'text-bone/55 dark:text-coal/55'
-            : 'text-ink-400 dark:text-chalk-subtle'
+          'num w-6 pt-[3px] text-[10.5px] font-mono tabular-nums transition-colors',
+          selected ? 'text-ink-700 dark:text-chalk-dim' : 'text-ink-400 dark:text-chalk-subtle'
         )}
       >
         {String(index).padStart(2, '0')}
@@ -93,10 +94,10 @@ function Row({
         <div className="flex items-center justify-between gap-2">
           <span
             className={clsx(
-              'font-display font-medium text-[13px] truncate transition-colors',
+              'font-display text-[13px] truncate transition-all duration-150',
               selected
-                ? 'text-bone dark:text-coal'
-                : 'text-ink-900 dark:text-chalk group-hover:text-ink-900'
+                ? 'font-semibold text-ink-900 dark:text-chalk'
+                : 'font-medium text-ink-700 dark:text-chalk-dim group-hover:text-ink-900 dark:group-hover:text-chalk'
             )}
           >
             {agent.id}
@@ -105,13 +106,11 @@ function Row({
         </div>
 
         <div className="mt-1 flex items-center gap-2">
-          <StateGlyph state={agent.state} selected={selected} />
+          <StateGlyph state={agent.state} />
           <span
             className={clsx(
               'text-[11px]',
-              selected
-                ? 'text-bone/65 dark:text-coal/65'
-                : 'text-ink-500 dark:text-chalk-dim'
+              selected ? 'text-ink-600 dark:text-chalk-dim' : 'text-ink-500 dark:text-chalk-dim'
             )}
           >
             {labelFor(agent)}
@@ -121,47 +120,20 @@ function Row({
         {(agent.commits.length > 0 || agent.usage?.cost != null) && (
           <div className="mt-1.5 flex items-baseline gap-3 font-mono text-[10.5px]">
             {agent.commits.length > 0 && (
-              <span
-                className={clsx(
-                  selected
-                    ? 'text-bone/70 dark:text-coal/70'
-                    : 'text-ink-500 dark:text-chalk-dim'
-                )}
-              >
-                <b
-                  className={clsx(
-                    'tabular-nums',
-                    selected
-                      ? 'text-bone dark:text-coal'
-                      : 'text-ink-900 dark:text-chalk'
-                  )}
-                >
+              <span className="text-ink-500 dark:text-chalk-dim">
+                <b className="tabular-nums text-ink-900 dark:text-chalk">
                   {agent.commits.length}
                 </b>
                 <span className="ml-1">c</span>
                 <span className="mx-1.5 opacity-40">·</span>
-                <b
-                  className={clsx(
-                    'tabular-nums',
-                    selected
-                      ? 'text-bone dark:text-coal'
-                      : 'text-ink-900 dark:text-chalk'
-                  )}
-                >
+                <b className="tabular-nums text-ink-900 dark:text-chalk">
                   {agent.filesChanged.length}
                 </b>
                 <span className="ml-1">f</span>
               </span>
             )}
             {agent.usage?.cost != null && (
-              <span
-                className={clsx(
-                  'tabular-nums',
-                  selected
-                    ? 'text-bone/55 dark:text-coal/55'
-                    : 'text-ink-400 dark:text-chalk-subtle'
-                )}
-              >
+              <span className="tabular-nums text-ink-400 dark:text-chalk-subtle">
                 ${agent.usage.cost.toFixed(3)}
               </span>
             )}
@@ -174,11 +146,7 @@ function Row({
 
 function ElapsedTag({ agent, selected }: { agent: Agent; selected: boolean }) {
   if (agent.state === 'queued') {
-    return (
-      <span className={clsx('text-[10.5px] font-mono', selected ? 'text-bone/45' : 'text-ink-300')}>
-        —
-      </span>
-    )
+    return <span className="text-[10.5px] font-mono text-ink-300 dark:text-chalk-subtle">—</span>
   }
   const ms =
     agent.elapsedMs != null
@@ -190,9 +158,7 @@ function ElapsedTag({ agent, selected }: { agent: Agent; selected: boolean }) {
     <span
       className={clsx(
         'num text-[10.5px] font-mono tabular-nums',
-        selected
-          ? 'text-bone/75 dark:text-coal/75'
-          : 'text-ink-500 dark:text-chalk-dim'
+        selected ? 'text-ink-700 dark:text-chalk' : 'text-ink-500 dark:text-chalk-dim'
       )}
     >
       {fmtElapsed(ms)}
@@ -200,40 +166,12 @@ function ElapsedTag({ agent, selected }: { agent: Agent; selected: boolean }) {
   )
 }
 
-function StateGlyph({ state, selected }: { state: Agent['state']; selected: boolean }) {
-  if (state === 'running') {
-    return (
-      <span
-        className={clsx(
-          'w-1.5 h-1.5 rounded-full',
-          selected
-            ? 'bg-bone animate-ring-chalk'
-            : 'bg-ink-900 dark:bg-chalk animate-ring-ink dark:animate-ring-chalk'
-        )}
-      />
-    )
-  }
-  if (state === 'done') {
-    return (
-      <span
-        className={clsx(
-          'w-1.5 h-1.5 rounded-full',
-          selected ? 'bg-bone' : 'bg-ink-700 dark:bg-chalk-dim'
-        )}
-      />
-    )
-  }
-  if (state === 'failed') return <span className="w-1.5 h-1.5 rounded-full bg-state-failed" />
-  if (state === 'noop')
-    return (
-      <span
-        className={clsx(
-          'w-1.5 h-1.5 rounded-full border bg-transparent',
-          selected ? 'border-bone' : 'border-ink-400 dark:border-chalk-subtle'
-        )}
-      />
-    )
-  return <span className={clsx('w-1.5 h-1.5 rounded-full', selected ? 'bg-bone/40' : 'bg-ink-200')} />
+function StateGlyph({ state }: { state: Agent['state'] }) {
+  if (state === 'running') return <span className="dot-run" />
+  if (state === 'done') return <span className="dot-done" />
+  if (state === 'failed') return <span className="dot-failed" />
+  if (state === 'noop') return <span className="dot-noop" />
+  return <span className="dot-idle" />
 }
 
 function labelFor(agent: Agent): string {

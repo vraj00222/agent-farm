@@ -6,6 +6,12 @@
   :root {
     color-scheme: light dark;
     --titlebar-h: 38px;
+    --accent-divider: rgb(15 15 14 / 0.30);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent-divider: rgb(242 242 240 / 0.30);
+    }
   }
 
   html, body, #root { height: 100%; width: 100%; }
@@ -37,14 +43,28 @@
     }
   }
 
-  /* Focus ring — ink, never colored */
-  *:focus-visible {
+  /* Focus ring — only on interactive controls (buttons/links).
+     Inputs signal focus through their wrapper border, NOT a ring. */
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible {
     @apply outline-none ring-2 ring-ink-900/25 ring-offset-2 ring-offset-bone rounded;
   }
   @media (prefers-color-scheme: dark) {
-    *:focus-visible {
+    button:focus-visible,
+    a:focus-visible,
+    [role="button"]:focus-visible {
       @apply ring-chalk/30 ring-offset-coal;
     }
+  }
+
+  /* Inputs/textareas: no ring at all. The input wrapper handles the
+     focus state visually (border-color darken). */
+  input:focus,
+  input:focus-visible,
+  textarea:focus,
+  textarea:focus-visible {
+    @apply outline-none ring-0;
   }
 }
 
