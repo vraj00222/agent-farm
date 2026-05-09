@@ -1,4 +1,5 @@
 node_modules/
 .agent-farm/
+.vercel/
 *.log
 .DS_Store
