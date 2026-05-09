@@ -3,196 +3,298 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="An open-source orchestrator for Claude Code. Run multiple coding agents in parallel, each in its own isolated git worktree." />
-    <meta name="theme-color" content="#F4EFE4" />
-    <meta name="color-scheme" content="light" />
-    <meta property="og:title" content="Agent Farm — Six tasks. Six worktrees. One you." />
-    <meta property="og:description" content="An open-source orchestrator for Claude Code. Run multiple coding agents in parallel, each in its own isolated git worktree." />
-    <meta property="og:type" content="article" />
-    <title>Agent Farm — Six tasks. Six worktrees. One you.</title>
+    <meta name="description" content="An open-source orchestrator for Claude Code. Spawns N parallel agents in isolated git worktrees." />
+    <meta name="theme-color" content="#FAFAF9" />
+    <meta property="og:title" content="Agent Farm — N agents, in parallel, with no merge conflicts" />
+    <meta property="og:description" content="An open-source orchestrator for Claude Code. Spawns N parallel agents in isolated git worktrees." />
+    <meta property="og:type" content="website" />
+    <title>Agent Farm</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&family=JetBrains+Mono:wght@400;500;700&display=swap"
-    />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" />
     <link rel="stylesheet" href="styles.css" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect y='3' width='14' height='1.5' fill='%23B83A1F'/%3E%3Crect y='7' width='14' height='1.5' fill='%231A1815'/%3E%3Crect y='11' width='14' height='1.5' fill='%231A1815' opacity='.4'/%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230F0F0E'/%3E%3Crect x='3' y='4' width='10' height='1.5' rx='.75' fill='%23FAFAF9'/%3E%3Crect x='3' y='7' width='10' height='1.5' rx='.75' fill='%23FAFAF9' opacity='.65'/%3E%3Crect x='3' y='10' width='10' height='1.5' rx='.75' fill='%23FAFAF9' opacity='.35'/%3E%3C/svg%3E" />
   </head>
   <body>
-    <!-- masthead — quiet, like a journal nameplate -->
-    <header class="masthead">
-      <span class="mh-name">AGENT&middot;FARM</span>
-      <span class="mh-meta">
-        <span class="mh-issue">Issue 005</span>
-        <span class="mh-sep">·</span>
-        <time datetime="2026-05">May 2026</time>
-        <span class="mh-sep">·</span>
-        <span>v0.0.5</span>
-      </span>
-    </header>
+    <!-- Top bar — quiet, asymmetric -->
+    <div class="topbar reveal" style="--d: 0ms">
+      <div class="tb-l">
+        <span class="brand-name">Agent&nbsp;Farm</span>
+        <span class="brand-meta">v0.0.5 · open source · MIT</span>
+      </div>
+      <div class="tb-r">
+        <a href="#install">Install</a>
+        <a href="#features">How it works</a>
+        <a href="https://github.com/vraj00222/agent-farm" target="_blank" rel="noreferrer">Source</a>
+      </div>
+    </div>
 
-    <article class="essay">
-      <p class="folio">№ 01 — Manifest</p>
+    <!-- HERO — asymmetric, oversized type, no centered stack -->
+    <section class="hero">
+      <div class="hero-content">
+        <p class="kicker reveal" style="--d: 80ms">001 / Manifest</p>
 
-      <h1 class="title">
-        Six tasks.<br />
-        Six worktrees.<br />
-        <em>One you.</em>
-      </h1>
+        <h1 class="hero-title">
+          <span class="hl reveal" style="--d: 160ms">N agents.</span>
+          <span class="hl reveal" style="--d: 240ms">N worktrees.</span>
+          <span class="hl reveal hl-mute" style="--d: 320ms">Zero conflicts.</span>
+        </h1>
 
-      <p class="dek">
-        An open-source orchestrator for Claude Code. Each task runs in an
-        isolated git worktree, in parallel, with the agents&rsquo; work
-        surfaced as reviewable diffs.
-      </p>
+        <p class="hero-sub reveal" style="--d: 420ms">
+          An open-source orchestrator for Claude Code. Spawns
+          <em>N</em> parallel agents in isolated git worktrees,
+          surfaces structured events as they work, and keeps your
+          main branch untouched until you choose to touch it.
+        </p>
 
-      <hr class="rule" />
+        <div class="hero-actions reveal" style="--d: 520ms">
+          <a class="btn btn-pri" href="https://github.com/vraj00222/agent-farm/releases/latest" target="_blank" rel="noreferrer">
+            <svg class="apl" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18.71 19.5C17.88 20.74 17 21.95 15.66 21.97C14.32 22 13.89 21.18 12.37 21.18C10.84 21.18 10.37 21.95 9.09997 22C7.78997 22.05 6.79997 20.68 5.95997 19.47C4.24997 17 2.93997 12.45 4.69997 9.39C5.56997 7.87 7.12997 6.91 8.81997 6.88C10.1 6.86 11.32 7.75 12.11 7.75C12.89 7.75 14.37 6.68 15.92 6.84C16.57 6.87 18.39 7.1 19.56 8.82C19.47 8.88 17.39 10.1 17.41 12.63C17.44 15.65 20.06 16.66 20.09 16.67C20.06 16.74 19.67 18.11 18.71 19.5ZM13 3.5C13.73 2.67 14.94 2.04 15.94 2C16.07 3.17 15.6 4.35 14.9 5.19C14.21 6.04 13.07 6.7 11.95 6.61C11.8 5.46 12.36 4.26 13 3.5Z"/>
+            </svg>
+            <span class="btn-label">Download for macOS</span>
+            <span class="btn-tail" aria-hidden="true">↓</span>
+          </a>
+          <code class="install-line">$&nbsp;&nbsp;npm i -g agent-farm</code>
+        </div>
+      </div>
 
-      <p class="lede">
-        <span class="dropcap">S</span>ometime around the third hour of
-        pair-programming with Claude Code on a single problem, you start to
-        wonder if you&rsquo;re doing this right. The agent is fast. You are
-        not. It finishes a file in a minute and waits while you read it. You
-        push to a branch, switch context to the next task, and the agent
-        waits some more.
-      </p>
+      <!-- Right rail: numbered phases. Not a card grid. -->
+      <aside class="hero-rail reveal" style="--d: 600ms">
+        <div class="rail-row"><span class="rr-n">01</span><span class="rr-l">spawn</span></div>
+        <div class="rail-row"><span class="rr-n">02</span><span class="rr-l">watch</span></div>
+        <div class="rail-row"><span class="rr-n">03</span><span class="rr-l">review</span></div>
+        <div class="rail-row"><span class="rr-n">04</span><span class="rr-l">cherry-pick</span></div>
+        <div class="rail-row rail-row-act">
+          <span class="rr-n">05</span>
+          <span class="rr-l">ship</span>
+          <span class="rr-dot" aria-hidden="true"></span>
+        </div>
+      </aside>
+    </section>
 
-      <p>What if it didn&rsquo;t have to.</p>
+    <!-- TERMINAL: real session, full bleed, oversized -->
+    <section class="term-section reveal-on-scroll">
+      <div class="term-meta">
+        <span>Session</span>
+        <span>2026.05.09 · 14:32:11Z</span>
+        <span>3 running · 0 done</span>
+      </div>
+      <pre class="terminal"><code><span class="t-cmt"># inside any clean git repo</span>
+<span class="t-pr">$</span> agent-farm
 
-      <p>
-        Agent Farm is a small, open-source orchestrator. It spawns
-        <em>N</em> Claude Code processes at once, one per task. Each runs
-        inside an isolated git worktree &mdash; a sibling folder of your
-        repository on its own branch. They never see each other&rsquo;s
-        edits. You see all of them.
-      </p>
+  type &amp; enter   spawn a new task
+  ↑ / ↓          select session
+  tab            tail / diff
+  ctrl+c         quit
 
-      <h2 class="subhead">Mechanism</h2>
+<span class="t-pr">›</span> fix the JWT expiry bug in src/auth
+<span class="t-pr">›</span> add a stress test for the rate limiter
+<span class="t-pr">›</span> migrate the user schema to zod v4
 
-      <p>
-        A worktree, in case it&rsquo;s been a while: <code>git worktree
-        add</code> creates a second working directory pointing at the same
-        object store as your main checkout, on a fresh branch. Two
-        worktrees on one repo is normal. Six is unusual but not strange.
-        The cost is disk &mdash; for a fifty-megabyte repo, six worktrees
-        run you about three hundred megabytes. Acceptable.
-      </p>
+  <span class="t-met">02:14</span>  fix-jwt-expiry-bug    <span class="t-arr">→</span> Read src/auth/middleware.ts
+  <span class="t-met">02:14</span>  fix-jwt-expiry-bug    <span class="t-arr">←</span> 87 lines
+  <span class="t-met">02:15</span>  add-stress-test       <span class="t-arr">→</span> Write test/limiter.stress.test.ts
+  <span class="t-met">02:16</span>  migrate-zod-v4        <span class="t-arr">→</span> Glob src/**/*.ts
+  <span class="t-met">02:16</span>  migrate-zod-v4        <span class="t-arr">←</span> 12 files
 
-      <p>
-        Agent Farm automates the lifecycle. You type a task; it slugifies
-        an id, creates the worktree, spawns claude inside it, and starts
-        streaming events back. Up to three sessions run in parallel by
-        default. The fourth queues automatically.
-      </p>
+<span class="t-pr">$</span> git cherry-pick agent/fix-jwt-expiry-bug
+<span class="t-pr">$</span> git cherry-pick agent/add-stress-test
+<span class="t-cmt"># the zod migration went off the rails. dropping it.</span>
+<span class="t-pr">$</span> git worktree remove ../repo-migrate-zod-v4 --force<span class="cur"></span></code></pre>
+    </section>
 
-      <pre class="terminal"><code><span class="t-prompt">$</span> agent-farm
-<span class="t-meta">
-type &amp; enter   spawn a new task
-↑ / ↓          select session
-tab            tail / diff
-ctrl+c         quit</span></code></pre>
+    <!-- HOW IT WORKS — typeset list, not a card grid -->
+    <section id="features" class="how reveal-on-scroll">
+      <div class="how-l">
+        <p class="kicker">002 / Mechanism</p>
+        <h2 class="how-h">A small piece of code, doing one thing well.</h2>
+      </div>
+      <ol class="how-list">
+        <li>
+          <span class="step-n">01</span>
+          <div>
+            <h3 class="step-h">Type, then enter.</h3>
+            <p class="step-b">
+              One prompt becomes one agent. Slugifies an id, branches off
+              your current HEAD, spawns claude inside a sibling worktree
+              at <code>../&lt;repo&gt;-&lt;id&gt;/</code>.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step-n">02</span>
+          <div>
+            <h3 class="step-h">Three at a time.</h3>
+            <p class="step-b">
+              Default cap of three concurrent agents. The fourth waits
+              for a slot. Adjust with <code>--max</code>. Each agent
+              runs against its own filesystem, so worktrees never fight.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step-n">03</span>
+          <div>
+            <h3 class="step-h">Stream-json events.</h3>
+            <p class="step-b">
+              Spawned with
+              <code>--output-format stream-json --verbose</code>. Tool
+              calls, file reads, edits, bash runs and assistant text
+              stream back as structured events. You read what the agent
+              actually did.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step-n">04</span>
+          <div>
+            <h3 class="step-h">Cherry-pick the wins.</h3>
+            <p class="step-b">
+              Diffs render in the right pane. Take the commits you like,
+              drop the ones that went sideways, keep the worktree around
+              for inspection. Main branch stays untouched.
+            </p>
+          </div>
+        </li>
+      </ol>
+    </section>
 
-      <h2 class="subhead">The Fan-Out</h2>
+    <!-- ANTI-MARKETING — what it does not do -->
+    <section class="anti reveal-on-scroll">
+      <div class="anti-l">
+        <p class="kicker">003 / Negation</p>
+        <h2 class="anti-h">What it does not do.</h2>
+        <p class="anti-sub">
+          Five absences, listed plainly. Restraint is the feature.
+        </p>
+      </div>
+      <ul class="anti-list">
+        <li>
+          <span class="ax">×</span>
+          <div>
+            <p class="ax-h">No server.</p>
+            <p class="ax-b">
+              There is no agent-farm cloud. No data leaves your machine
+              that wasn&rsquo;t already leaving via <code>claude</code>.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="ax">×</span>
+          <div>
+            <p class="ax-h">No prompt storage.</p>
+            <p class="ax-b">
+              State lives in <code>.agent-farm/state.json</code>. Wipe
+              it whenever.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="ax">×</span>
+          <div>
+            <p class="ax-h">No signup, no plans.</p>
+            <p class="ax-b">
+              Brings your own <code>claude</code> login. Pro, Max,
+              Team, API key. Your usage, your bill.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="ax">×</span>
+          <div>
+            <p class="ax-h">No magic compression.</p>
+            <p class="ax-b">
+              Ten parallel agents is roughly ten agents&rsquo; worth of
+              tokens. Each context is independent on purpose. That is
+              what makes the no-conflict guarantee work.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="ax">×</span>
+          <div>
+            <p class="ax-h">No bundled chat.</p>
+            <p class="ax-b">
+              The CLI is a queue and a terminal. The Mac app is a
+              queue, a terminal, and a diff viewer. Nothing else.
+            </p>
+          </div>
+        </li>
+      </ul>
+    </section>
 
-      <figure class="plate">
-        <pre class="ascii"><code>                main
-                 │
-                 ├── agent/fix-jwt-expiry-bug         <span class="ax">→ middleware.ts, jwt-utils.ts</span>
-                 ├── agent/add-rate-limit-test        <span class="ax">→ test/limiter.test.ts</span>
-                 ├── agent/migrate-zod-v4             <span class="ax">→ 12 files</span>
-                 ├── agent/remove-dead-imports        <span class="ax">→ 4 files</span>
-                 ├── agent/refactor-auth-middleware   <span class="ax">→ 6 files</span>
-                 └── agent/document-api               <span class="ax">→ docs/api.md</span></code></pre>
-        <figcaption>
-          <span class="fig-num">Plate I.</span>
-          Each branch is a sibling folder under the parent directory. The
-          object store is shared. The working trees are independent.
-        </figcaption>
-      </figure>
-
-      <p>
-        Inside each worktree, claude runs with
-        <code>--output-format stream-json --verbose</code>. Tool calls,
-        file reads, edits, bash invocations and assistant messages stream
-        back as a structured event tail. You watch what each one is doing,
-        navigate between them, switch to the diff view when one finishes.
-      </p>
-
-      <p>
-        When the work is done you cherry-pick the wins. The misses look
-        like commits you don&rsquo;t take. Your main branch stays
-        untouched until you choose to touch it.
-      </p>
-
-      <pre class="terminal"><code><span class="t-prompt">$</span> git cherry-pick agent/fix-jwt-expiry-bug
-<span class="t-prompt">$</span> git cherry-pick agent/add-rate-limit-test
-<span class="t-prompt">$</span> git worktree remove ../repo-migrate-zod-v4 --force
-<span class="t-meta">                                      <em>(that one went off the rails)</em></span></code></pre>
-
-      <h2 class="subhead">What it doesn&rsquo;t do</h2>
-
-      <p>
-        It doesn&rsquo;t host anything. There is no server in the data
-        path. It doesn&rsquo;t store your prompts. It doesn&rsquo;t have a
-        freemium tier or a signup screen. It doesn&rsquo;t replace the
-        <code>claude</code> CLI &mdash; it shells out to the one already
-        installed on your machine, signed into whichever plan you already
-        pay for. Pro, Max, Team, API key. Your usage, your billing.
-      </p>
-
-      <p>
-        It also doesn&rsquo;t pretend to be a fancier model than it is.
-        The cost of running ten parallel agents is roughly ten agents&rsquo;
-        worth of tokens. There&rsquo;s no magic compression or shared
-        context. Each agent is independent, on purpose, because that is
-        what makes the conflict-free guarantee work.
-      </p>
-
-      <h2 class="subhead">Install</h2>
-
-      <p>The CLI works in any terminal:</p>
-
-      <pre class="terminal"><code><span class="t-prompt">$</span> npm i -g agent-farm
-<span class="t-prompt">$</span> agent-farm<span class="cursor"></span></code></pre>
-
-      <p>The macOS app ships the same orchestrator with a native UI.</p>
-
-      <p class="cta-row">
-        <a class="cta" href="https://github.com/vraj00222/agent-farm/releases/latest" target="_blank" rel="noreferrer">
-          <svg class="cta-apple" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M18.71 19.5C17.88 20.74 17 21.95 15.66 21.97C14.32 22 13.89 21.18 12.37 21.18C10.84 21.18 10.37 21.95 9.09997 22C7.78997 22.05 6.79997 20.68 5.95997 19.47C4.24997 17 2.93997 12.45 4.69997 9.39C5.56997 7.87 7.12997 6.91 8.81997 6.88C10.1 6.86 11.32 7.75 12.11 7.75C12.89 7.75 14.37 6.68 15.92 6.84C16.57 6.87 18.39 7.1 19.56 8.82C19.47 8.88 17.39 10.1 17.41 12.63C17.44 15.65 20.06 16.66 20.09 16.67C20.06 16.74 19.67 18.11 18.71 19.5ZM13 3.5C13.73 2.67 14.94 2.04 15.94 2C16.07 3.17 15.6 4.35 14.9 5.19C14.21 6.04 13.07 6.7 11.95 6.61C11.8 5.46 12.36 4.26 13 3.5Z"/>
-          </svg>
-          Download for macOS
-          <span class="cta-arrow" aria-hidden="true">→</span>
-        </a>
-      </p>
-
-      <p class="micro">
-        Apple Silicon and Intel. Requires
-        <a href="https://docs.anthropic.com/en/docs/claude-code">claude code</a>
-        installed and authenticated.
-      </p>
-
-      <hr class="rule" />
-
-      <footer class="colophon">
-        <p>
-          <span>Open-source under the MIT licence.</span>
-          <span class="dot">·</span>
-          <span>Source on
+    <!-- INSTALL -->
+    <section id="install" class="install reveal-on-scroll">
+      <div class="ins-l">
+        <p class="kicker">004 / Install</p>
+        <h2 class="ins-h">Two surfaces. One engine.</h2>
+        <p class="ins-sub">
+          The orchestrator is one piece of code. The CLI ships it for
+          terminals; the Mac app ships it with a native UI. Pick the
+          surface that fits the moment.
+        </p>
+      </div>
+      <div class="ins-r">
+        <div class="ins-card">
+          <div class="ins-card-head">
+            <span class="ins-tag">CLI · npm</span>
+          </div>
+          <pre class="ins-code"><code><span class="t-pr">$</span> npm i -g agent-farm
+<span class="t-pr">$</span> agent-farm<span class="cur"></span></code></pre>
+          <p class="ins-note">
+            Node 18+. Works on macOS, Linux, WSL. Source on
             <a href="https://github.com/vraj00222/agent-farm" target="_blank" rel="noreferrer">GitHub</a>.
-          </span>
-          <span class="dot">·</span>
-          <span>Built in long evenings by
-            <a href="https://github.com/vraj00222" target="_blank" rel="noreferrer">@vraj</a>.
-          </span>
-        </p>
-        <p class="setting">
-          <em>Set in Newsreader and JetBrains Mono.</em>
-        </p>
-      </footer>
-    </article>
+          </p>
+        </div>
+        <a class="ins-card ins-card-link" href="https://github.com/vraj00222/agent-farm/releases/latest" target="_blank" rel="noreferrer">
+          <div class="ins-card-head">
+            <span class="ins-tag">macOS · DMG</span>
+            <span class="ins-tail">↓</span>
+          </div>
+          <div class="ins-dl">
+            <svg class="apl-lg" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18.71 19.5C17.88 20.74 17 21.95 15.66 21.97C14.32 22 13.89 21.18 12.37 21.18C10.84 21.18 10.37 21.95 9.09997 22C7.78997 22.05 6.79997 20.68 5.95997 19.47C4.24997 17 2.93997 12.45 4.69997 9.39C5.56997 7.87 7.12997 6.91 8.81997 6.88C10.1 6.86 11.32 7.75 12.11 7.75C12.89 7.75 14.37 6.68 15.92 6.84C16.57 6.87 18.39 7.1 19.56 8.82C19.47 8.88 17.39 10.1 17.41 12.63C17.44 15.65 20.06 16.66 20.09 16.67C20.06 16.74 19.67 18.11 18.71 19.5ZM13 3.5C13.73 2.67 14.94 2.04 15.94 2C16.07 3.17 15.6 4.35 14.9 5.19C14.21 6.04 13.07 6.7 11.95 6.61C11.8 5.46 12.36 4.26 13 3.5Z"/>
+            </svg>
+            <p class="ins-dl-h">Download for macOS</p>
+          </div>
+          <p class="ins-note">
+            Apple Silicon and Intel. Requires
+            <span class="ins-link">claude</span> installed and authenticated.
+          </p>
+        </a>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="foot">
+      <div class="foot-l">
+        <p class="foot-name">Agent Farm</p>
+        <p class="foot-meta">v0.0.5 · MIT licence · 2026</p>
+      </div>
+      <div class="foot-r">
+        <a href="https://github.com/vraj00222/agent-farm" target="_blank" rel="noreferrer">github</a>
+        <a href="https://github.com/vraj00222/agent-farm/issues" target="_blank" rel="noreferrer">issues</a>
+        <a href="https://github.com/vraj00222/agent-farm/releases" target="_blank" rel="noreferrer">releases</a>
+        <a href="https://docs.anthropic.com/en/docs/claude-code" target="_blank" rel="noreferrer">claude code</a>
+      </div>
+    </footer>
+
+    <script>
+      // Reveal-on-scroll using IntersectionObserver. No scroll listeners.
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) {
+              e.target.classList.add('is-revealed')
+              io.unobserve(e.target)
+            }
+          }
+        },
+        { rootMargin: '-8% 0px -8% 0px', threshold: 0.05 }
+      )
+      document.querySelectorAll('.reveal-on-scroll').forEach((el) => io.observe(el))
+    </script>
   </body>
 </html>

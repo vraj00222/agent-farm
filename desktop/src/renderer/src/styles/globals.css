@@ -5,171 +5,155 @@
 @layer base {
   :root {
     color-scheme: light dark;
-    --titlebar-height: 40px;
+    --titlebar-h: 38px;
   }
 
-  html,
-  body,
-  #root {
-    height: 100%;
-    width: 100%;
-  }
+  html, body, #root { height: 100%; width: 100%; }
 
   body {
-    @apply bg-bg text-ink font-sans antialiased;
-    background-image: theme('backgroundImage.mesh-light');
-    background-attachment: fixed;
+    @apply bg-bone text-ink font-sans antialiased;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
-    font-feature-settings: 'cv11', 'ss01', 'kern';
+    font-feature-settings: 'cv11', 'ss01', 'kern', 'tnum';
   }
 
   @media (prefers-color-scheme: dark) {
-    body {
-      @apply bg-bg-dark text-ink-dark;
-      background-image: theme('backgroundImage.mesh-dark');
-    }
+    body { @apply bg-coal text-chalk; }
   }
 
-  .drag {
-    -webkit-app-region: drag;
-  }
-  .no-drag {
-    -webkit-app-region: no-drag;
-  }
+  .drag    { -webkit-app-region: drag; }
+  .no-drag { -webkit-app-region: no-drag; }
 
+  /* Selection — tinted, never pure */
   ::selection {
-    background: rgb(87 101 242 / 0.25);
-    color: theme('colors.ink.DEFAULT');
+    background: theme('colors.ink.900' / 0.18);
+    color: theme('colors.ink.900');
   }
   @media (prefers-color-scheme: dark) {
     ::selection {
-      color: theme('colors.ink.dark');
+      background: theme('colors.chalk.DEFAULT' / 0.20);
+      color: theme('colors.chalk.DEFAULT');
     }
   }
 
+  /* Focus ring — ink, never colored */
   *:focus-visible {
-    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-bg;
+    @apply outline-none ring-2 ring-ink-900/25 ring-offset-2 ring-offset-bone rounded;
   }
   @media (prefers-color-scheme: dark) {
     *:focus-visible {
-      @apply ring-offset-bg-dark;
+      @apply ring-chalk/30 ring-offset-coal;
     }
   }
 }
 
 @layer components {
-  /* Subtle dividers — replace Swiss heavy black rules */
-  .divider {
-    @apply h-px w-full bg-border dark:bg-border-dark;
-  }
-  .divider-v {
-    @apply w-px h-full bg-border dark:bg-border-dark;
+  /* Hairlines — tinted, 1px, no exceptions */
+  .hr {
+    @apply h-px w-full bg-line dark:bg-line-dark;
   }
 
-  /* Section labels — small caps, generous tracking */
+  /* Editorial labels — small mono caps */
   .label {
-    @apply font-mono text-2xs uppercase tracking-cap text-ink-muted dark:text-ink-dark-muted;
+    @apply font-mono text-2xs uppercase tracking-cap text-ink-500 dark:text-chalk-subtle;
   }
 
-  /* Display numerals — for elapsed time, version, counts */
-  .numeral {
+  /* Numerals with tabular figures */
+  .num {
     @apply font-display tabular-nums;
     font-feature-settings: 'tnum', 'cv11';
   }
 
-  /* Cards and surfaces — Linear's signature subtle elevation */
-  .card {
-    @apply bg-surface dark:bg-surface-dark
-           border border-border dark:border-border-dark
-           rounded-lg shadow-sm;
+  /* State dots — semantic color, tiny only */
+  .dot-run {
+    @apply w-1.5 h-1.5 rounded-full bg-ink-900 dark:bg-chalk animate-ring-ink dark:animate-ring-chalk;
   }
-
-  .card-raised {
-    @apply bg-surface-raised dark:bg-surface-dark-raised
-           border border-border dark:border-border-dark
-           rounded-lg shadow-md;
-  }
-
-  /* Pulsing accent dot for active state */
-  .dot-active {
-    @apply w-2 h-2 rounded-full bg-accent animate-pulse-ring;
-  }
-
-  .dot-done {
-    @apply w-2 h-2 rounded-full bg-success;
-  }
-
-  .dot-failed {
-    @apply w-2 h-2 rounded-full bg-danger;
-  }
-
+  .dot-done   { @apply w-1.5 h-1.5 rounded-full bg-ink-700 dark:bg-chalk-dim; }
+  .dot-failed { @apply w-1.5 h-1.5 rounded-full bg-state-failed; }
   .dot-noop {
-    @apply w-2 h-2 rounded-full border-[1.5px] border-warn bg-transparent;
+    @apply w-1.5 h-1.5 rounded-full border border-ink-400 bg-transparent
+           dark:border-chalk-subtle;
   }
+  .dot-idle   { @apply w-1.5 h-1.5 rounded-full bg-ink-200 dark:bg-coal-raised; }
 
-  .dot-idle {
-    @apply w-2 h-2 rounded-full bg-ink-subtle dark:bg-ink-dark-subtle;
-  }
-
-  /* Buttons — rounded, refined */
+  /* Primary button — pure ink. Active scales 0.97 (real physics). */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2
-           bg-accent hover:bg-accent-600 active:bg-accent-700
-           text-white font-medium text-sm
-           rounded-md shadow-sm hover:shadow-glow
-           transition-all duration-150
+    @apply inline-flex items-center gap-2 px-4 py-2
+           bg-ink-900 text-bone
+           dark:bg-chalk dark:text-coal
+           text-sm font-medium
+           rounded-md
            cursor-pointer no-drag
-           disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none;
+           transition-all duration-200 ease-quart-out
+           hover:bg-ink-700 dark:hover:bg-chalk-dim
+           active:scale-[0.97]
+           disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100;
   }
 
+  /* Ghost button — bordered, transparent until hover */
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-1.5
-           bg-transparent hover:bg-surface-raised dark:hover:bg-surface-dark-raised
-           text-ink dark:text-ink-dark text-sm
+    @apply inline-flex items-center gap-2 px-3 py-1.5
+           bg-transparent text-ink-700
+           dark:text-chalk-dim
+           text-sm
            rounded-md
-           transition-colors duration-100
+           cursor-pointer no-drag
+           transition-colors duration-150 ease-quart-out
+           hover:bg-bone-raised dark:hover:bg-coal-raised
+           hover:text-ink dark:hover:text-chalk;
+  }
+
+  /* Keyboard key — physical chiclet feel */
+  .kbd {
+    @apply inline-flex items-center justify-center
+           min-w-[18px] h-[18px] px-1
+           bg-bone-sunk dark:bg-coal-sunk
+           border border-line dark:border-line-dark
+           rounded
+           font-mono text-[10px] text-ink-500 dark:text-chalk-subtle;
+  }
+
+  /* List row interactive base — used by AgentList */
+  .row-base {
+    @apply relative w-full text-left
+           transition-all duration-150 ease-quart-out
            cursor-pointer no-drag;
   }
-
-  .kbd {
-    @apply inline-flex items-center justify-center min-w-[20px] h-5 px-1.5
-           bg-surface-sunk dark:bg-surface-dark-sunk
-           border border-border dark:border-border-dark
-           rounded
-           font-mono text-2xs text-ink-muted dark:text-ink-dark-muted;
-  }
 }
 
-/* Scrollbar — subtle, modern */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* Scrollbar — invisible until hover */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgb(0 0 0 / 0.12);
-  border-radius: 999px;
+  background: rgb(15 15 14 / 0.10);
+  border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(0 0 0 / 0.25);
+  background: rgb(15 15 14 / 0.25);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 @media (prefers-color-scheme: dark) {
   ::-webkit-scrollbar-thumb {
-    background: rgb(255 255 255 / 0.12);
+    background: rgb(242 242 240 / 0.10);
     border: 2px solid transparent;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgb(255 255 255 / 0.25);
+    background: rgb(242 242 240 / 0.25);
     border: 2px solid transparent;
     background-clip: padding-box;
+  }
+}
+
+/* Reduced motion respects */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

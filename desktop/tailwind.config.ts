@@ -1,58 +1,72 @@
 import type { Config } from 'tailwindcss'
 
+/**
+ * Pure tinted black & white system. No accent color. Semantic state colors
+ * exist only as 5px dots, never as backgrounds, borders, or accents.
+ *
+ * All neutrals are tinted toward warm-cool ink (chroma ~0.005) per
+ * impeccable's "never use #000 or #fff" rule.
+ *
+ * Motion is one curve only: cubic-bezier(0.32, 0.72, 0, 1).
+ */
 export default {
   content: ['./src/renderer/index.html', './src/renderer/src/**/*.{ts,tsx}'],
   darkMode: 'media',
   theme: {
     extend: {
       colors: {
-        // Linear-school palette: warm-neutral light, deep cool dark.
-        bg: {
-          DEFAULT: '#FCFCFD',
-          dark: '#0B0B0F',
-        },
-        surface: {
-          DEFAULT: '#FFFFFF',
-          raised: '#F7F7F9',
-          sunk: '#F2F2F4',
-          dark: '#15151B',
-          'dark-raised': '#1C1C24',
-          'dark-sunk': '#101015',
-        },
-        border: {
-          DEFAULT: '#E4E4E7',
-          strong: '#D4D4D8',
-          dark: '#27272A',
-          'dark-strong': '#3F3F46',
+        // Tinted neutrals — warm-cool ink scale.
+        // Light surface: bone (warm off-white). Dark surface: deep ink.
+        bone: {
+          DEFAULT: '#FAFAF9', // primary bg, light
+          raised: '#F4F4F2',  // raised surface (selected, hover)
+          sunk: '#EFEFED',    // sunken surface (input bg, code)
         },
         ink: {
-          DEFAULT: '#0B0B0F',
-          muted: '#52525B',
-          subtle: '#A1A1AA',
-          dark: '#F5F5F7',
-          'dark-muted': '#A1A1AA',
-          'dark-subtle': '#71717A',
+          50:  '#F7F7F6',
+          100: '#EAEAE8',
+          200: '#D6D6D2',
+          300: '#B5B5B0',
+          400: '#85857F',
+          500: '#5C5C56',
+          600: '#3F3F3B',
+          700: '#2A2A27',
+          800: '#1A1A18',
+          900: '#0F0F0E',     // deep ink for text. Not pure black.
+          DEFAULT: '#0F0F0E',
         },
-        accent: {
-          50: '#EEF0FE',
-          100: '#DDE0FD',
-          200: '#BFC6FB',
-          300: '#9AA3F8',
-          400: '#7B86F6',
-          500: '#5765F2',
-          600: '#4651D9',
-          700: '#3942B8',
-          800: '#2D348E',
-          900: '#212666',
-          DEFAULT: '#5765F2',
+        // Dark mode equivalents.
+        coal: {
+          DEFAULT: '#0E0E0D', // deep bg, dark mode
+          raised: '#181816',
+          sunk: '#0A0A09',
         },
-        success: '#10B981',
-        warn: '#F59E0B',
-        danger: '#EF4444',
+        chalk: {
+          DEFAULT: '#F2F2F0',  // text on dark
+          dim: '#A8A8A2',
+          subtle: '#6E6E68',
+        },
+        // Borders — tinted hairlines.
+        line: {
+          DEFAULT: '#E0E0DC',
+          strong: '#C8C8C2',
+          dark: '#252523',
+          'dark-strong': '#3A3A36',
+        },
+        // Semantic state colors — used ONLY for the small state dot.
+        // Desaturated. Never used as backgrounds, borders, fills.
+        state: {
+          run: '#0F0F0E',     // running = ink (with pulse ring)
+          done: '#3F3F3B',    // done = mid ink
+          failed: '#A02F2F',  // a single muted brick red
+          noop: '#85857F',    // muted gray
+        },
       },
       fontFamily: {
-        display: ['"SF Pro Display"', 'Geist', 'Inter', 'system-ui', 'sans-serif'],
+        // Geist + JetBrains Mono — both vetted against impeccable's reflex-reject list.
+        // No display serif. No second sans. One family, varied weights.
         sans: ['Geist', '"SF Pro Text"', 'system-ui', 'sans-serif'],
+        display: ['Geist', '"SF Pro Display"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', '"SF Mono"', 'ui-monospace', 'monospace'],
       },
       fontSize: {
@@ -63,92 +77,67 @@ export default {
         md: ['14px', { lineHeight: '22px' }],
         lg: ['16px', { lineHeight: '24px' }],
         xl: ['18px', { lineHeight: '26px' }],
-        '2xl': ['22px', { lineHeight: '28px', letterSpacing: '-0.01em' }],
-        '3xl': ['28px', { lineHeight: '34px', letterSpacing: '-0.015em' }],
-        '4xl': ['36px', { lineHeight: '42px', letterSpacing: '-0.02em' }],
-        '5xl': ['48px', { lineHeight: '54px', letterSpacing: '-0.025em' }],
-        '6xl': ['60px', { lineHeight: '64px', letterSpacing: '-0.03em' }],
-        '7xl': ['72px', { lineHeight: '76px', letterSpacing: '-0.035em' }],
-        '8xl': ['96px', { lineHeight: '100px', letterSpacing: '-0.04em' }],
+        '2xl': ['22px', { lineHeight: '28px', letterSpacing: '-0.012em' }],
+        '3xl': ['28px', { lineHeight: '32px', letterSpacing: '-0.018em' }],
+        '4xl': ['36px', { lineHeight: '40px', letterSpacing: '-0.024em' }],
+        '5xl': ['48px', { lineHeight: '52px', letterSpacing: '-0.030em' }],
       },
       letterSpacing: {
         tightest: '-0.04em',
-        cap: '0.06em',
+        cap: '0.10em',
       },
       borderRadius: {
         none: '0px',
-        sm: '6px',
-        DEFAULT: '8px',
-        md: '10px',
-        lg: '12px',
-        xl: '16px',
-        '2xl': '20px',
-        '3xl': '28px',
+        sm: '5px',
+        DEFAULT: '6px',
+        md: '8px',
+        lg: '10px',
+        xl: '14px',
+        '2xl': '18px',
         full: '9999px',
       },
       boxShadow: {
-        xs: '0 1px 2px 0 rgb(8 8 16 / 0.05)',
-        sm: '0 2px 4px -1px rgb(8 8 16 / 0.06), 0 1px 2px 0 rgb(8 8 16 / 0.04)',
-        DEFAULT:
-          '0 4px 8px -2px rgb(8 8 16 / 0.07), 0 2px 4px -1px rgb(8 8 16 / 0.04)',
-        md: '0 8px 16px -4px rgb(8 8 16 / 0.08), 0 4px 8px -2px rgb(8 8 16 / 0.05)',
-        lg: '0 16px 32px -8px rgb(8 8 16 / 0.10), 0 8px 16px -4px rgb(8 8 16 / 0.06)',
-        xl: '0 24px 48px -12px rgb(8 8 16 / 0.18)',
-        glow: '0 0 0 1px rgb(87 101 242 / 0.20), 0 4px 12px -2px rgb(87 101 242 / 0.30)',
-        'glow-lg':
-          '0 0 0 1px rgb(87 101 242 / 0.30), 0 12px 32px -8px rgb(87 101 242 / 0.40)',
-        inner: 'inset 0 1px 2px 0 rgb(8 8 16 / 0.06)',
+        // Practically non-existent. The skill says shadows must be ultra-diffuse.
+        xs:   '0 1px 0 0 rgb(15 15 14 / 0.04)',
+        sm:   '0 1px 2px 0 rgb(15 15 14 / 0.04)',
+        DEFAULT: '0 2px 4px -1px rgb(15 15 14 / 0.04), 0 1px 2px 0 rgb(15 15 14 / 0.03)',
+        md:   '0 4px 8px -2px rgb(15 15 14 / 0.05), 0 2px 4px -1px rgb(15 15 14 / 0.03)',
       },
-      backgroundImage: {
-        'mesh-light':
-          'radial-gradient(ellipse at top left, rgb(87 101 242 / 0.06), transparent 40%), radial-gradient(ellipse at bottom right, rgb(124 58 237 / 0.04), transparent 50%)',
-        'mesh-dark':
-          'radial-gradient(ellipse at top left, rgb(87 101 242 / 0.10), transparent 40%), radial-gradient(ellipse at bottom right, rgb(124 58 237 / 0.08), transparent 50%)',
-        'accent-gradient':
-          'linear-gradient(135deg, #5765F2 0%, #7C3AED 100%)',
-        'shimmer':
-          'linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.08) 50%, transparent 100%)',
+      transitionTimingFunction: {
+        'expo-out': 'cubic-bezier(0.16, 1, 0.3, 1)',
+        'quart-out': 'cubic-bezier(0.32, 0.72, 0, 1)',
       },
       keyframes: {
-        breathe: {
-          '0%, 100%': { opacity: '0.7', transform: 'scale(1)' },
-          '50%': { opacity: '1', transform: 'scale(1.18)' },
+        // Pulse-ring on the running dot — ink rings outward, no color.
+        ringInk: {
+          '0%':   { boxShadow: '0 0 0 0 rgb(15 15 14 / 0.45)' },
+          '70%':  { boxShadow: '0 0 0 7px rgb(15 15 14 / 0)' },
+          '100%': { boxShadow: '0 0 0 0 rgb(15 15 14 / 0)' },
         },
-        pulseRing: {
-          '0%': {
-            boxShadow: '0 0 0 0 rgb(87 101 242 / 0.55)',
-          },
-          '70%': {
-            boxShadow: '0 0 0 6px rgb(87 101 242 / 0)',
-          },
-          '100%': {
-            boxShadow: '0 0 0 0 rgb(87 101 242 / 0)',
-          },
+        ringChalk: {
+          '0%':   { boxShadow: '0 0 0 0 rgb(242 242 240 / 0.40)' },
+          '70%':  { boxShadow: '0 0 0 7px rgb(242 242 240 / 0)' },
+          '100%': { boxShadow: '0 0 0 0 rgb(242 242 240 / 0)' },
         },
         cursor: {
-          '0%, 49%': { opacity: '1' },
+          '0%, 49%':   { opacity: '1' },
           '50%, 100%': { opacity: '0' },
         },
-        slideIn: {
-          '0%': { opacity: '0', transform: 'translateY(6px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
         rise: {
-          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '0%':   { opacity: '0', transform: 'translateY(6px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
-        shimmer: {
-          '0%': { backgroundPosition: '-200% 0' },
-          '100%': { backgroundPosition: '200% 0' },
+        fadeIn: {
+          '0%':   { opacity: '0' },
+          '100%': { opacity: '1' },
         },
       },
       animation: {
-        breathe: 'breathe 1.6s ease-in-out infinite',
-        'pulse-ring': 'pulseRing 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        cursor: 'cursor 1.05s steps(1, end) infinite',
-        slideIn: 'slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both',
-        rise: 'rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
-        shimmer: 'shimmer 2.4s ease-in-out infinite',
+        'ring-ink':   'ringInk 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'ring-chalk': 'ringChalk 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        cursor:       'cursor 1.05s steps(1, end) infinite',
+        rise:         'rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'fade-in':    'fadeIn 0.3s cubic-bezier(0.32, 0.72, 0, 1) both',
       },
     },
   },

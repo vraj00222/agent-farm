@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import clsx from 'clsx'
 
 interface PromptBarProps {
   onSubmit: (prompt: string) => void
 }
 
 /**
- * Bottom input — Linear/Raycast-style command bar. Soft surface, glowing
- * focus ring, prominent send button on the right. Enter spawns.
+ * Bottom input. Pure tinted B/W. Focus is signaled by a subtle border
+ * darkening, not a colored ring. Spawn button uses real active-scale
+ * physics. ⌘K-style kbd hint sits inside the button.
  */
 export function PromptBar({ onSubmit }: PromptBarProps) {
   const [value, setValue] = useState('')
@@ -25,21 +27,24 @@ export function PromptBar({ onSubmit }: PromptBarProps) {
   }
 
   return (
-    <div className="px-3 py-3 border-t border-border dark:border-border-dark
-                    bg-bg/80 dark:bg-bg-dark/80 backdrop-blur-xl">
+    <div className="px-3 py-3 border-t border-line dark:border-line-dark bg-bone dark:bg-coal">
       <div
-        className={`flex items-stretch rounded-xl border transition-all duration-200
-                    bg-surface dark:bg-surface-dark
-                    ${
-                      focused
-                        ? 'border-accent shadow-glow'
-                        : 'border-border dark:border-border-dark shadow-sm'
-                    }`}
+        className={clsx(
+          'flex items-stretch rounded-md transition-all duration-200 ease-quart-out',
+          'bg-bone-sunk dark:bg-coal-sunk',
+          'border',
+          focused
+            ? 'border-ink-700 dark:border-chalk-dim'
+            : 'border-line dark:border-line-dark hover:border-ink-300 dark:hover:border-line-dark-strong'
+        )}
       >
-        <div className="flex items-center pl-4 pr-3">
-          <span className={`font-mono text-base transition-colors ${
-            focused ? 'text-accent' : 'text-ink-subtle'
-          }`}>
+        <div className="flex items-center pl-3.5 pr-2 select-none">
+          <span
+            className={clsx(
+              'font-mono text-base transition-colors duration-150',
+              focused ? 'text-ink-900 dark:text-chalk' : 'text-ink-400 dark:text-chalk-subtle'
+            )}
+          >
             ›
           </span>
         </div>
@@ -58,21 +63,25 @@ export function PromptBar({ onSubmit }: PromptBarProps) {
               setValue('')
             }
           }}
-          placeholder="Describe a task and press Enter…"
+          placeholder="describe a task and press enter"
           spellCheck={false}
-          className="flex-1 bg-transparent font-display text-base text-ink dark:text-ink-dark
-                     placeholder:text-ink-subtle dark:placeholder:text-ink-dark-subtle
-                     focus:outline-none py-3 no-drag"
+          className="flex-1 bg-transparent
+                     font-display text-base text-ink-900 dark:text-chalk
+                     placeholder:text-ink-400 dark:placeholder:text-chalk-subtle
+                     focus:outline-none py-3 pr-3 no-drag"
         />
-        <div className="flex items-center pr-2">
+        <div className="flex items-center pr-1.5">
           <button
             type="button"
             onClick={submit}
             disabled={!value.trim()}
             className="btn-primary"
           >
-            Spawn
-            <span className="kbd ml-1 bg-white/15 border-white/20 text-white/80">↵</span>
+            <span>spawn</span>
+            <span className="kbd bg-bone/15 border-bone/25 text-bone/85
+                             dark:bg-coal/15 dark:border-coal/25 dark:text-coal/85">
+              ↵
+            </span>
           </button>
         </div>
       </div>

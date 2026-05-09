@@ -7,17 +7,17 @@ interface MainPanelProps {
 }
 
 /**
- * Right pane — modern Mac-app feel. Soft cards, layered depth, accent
- * gradient on the elapsed badge for the running agent. Event tail uses
- * Linear-style typography hierarchy.
+ * Right pane. Pure tinted B/W. No hero-metric template (no big elapsed
+ * gradient + 4-stat grid). Header is a single editorial line. Stats
+ * sit inline as small typeset values, not boxed cards.
  */
 export function MainPanel({ agent }: MainPanelProps) {
   if (!agent) return <EmptyState />
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div key={agent.id} className="flex flex-col h-full overflow-hidden animate-fade-in">
       <Header agent={agent} />
-      <div className="flex-1 overflow-y-auto px-7 py-5">
+      <div className="flex-1 overflow-y-auto px-8 py-6">
         <Tail agent={agent} />
       </div>
     </div>
@@ -25,192 +25,135 @@ export function MainPanel({ agent }: MainPanelProps) {
 }
 
 function EmptyState() {
+  // Asymmetric. Not centered. Not a card grid.
   return (
-    <div className="flex flex-col h-full justify-center items-center px-12 py-12">
-      <div className="max-w-md text-center">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl
-                        bg-accent-gradient shadow-glow-lg mb-6">
-          <Logo />
-        </div>
-        <h2 className="font-display font-semibold text-3xl text-ink dark:text-ink-dark">
-          Spawn your first agent
+    <div className="h-full flex flex-col justify-between px-10 py-10">
+      <div>
+        <p className="label">no session</p>
+        <h2 className="font-display text-4xl font-medium tracking-tightest mt-3 max-w-[16ch] leading-[1.05] text-ink-900 dark:text-chalk">
+          Type a task<br />in the bar below.
         </h2>
-        <p className="mt-3 text-base text-ink-muted dark:text-ink-dark-muted leading-relaxed">
-          Type a task in the bar below. Agent Farm creates an isolated git worktree,
-          spawns claude inside it, and shows you exactly what it does — step by step.
+        <p className="mt-5 text-base text-ink-500 dark:text-chalk-dim leading-relaxed max-w-[42ch]">
+          Each task spawns claude in a fresh git worktree. Up to three
+          run at once; the rest queue automatically.
         </p>
-
-        <div className="mt-10 grid grid-cols-3 gap-3">
-          <Tile
-            title="Isolated"
-            body="A worktree per task. Claude can't touch your tree."
-          />
-          <Tile
-            title="Parallel"
-            body="Up to three at once. The rest queue smoothly."
-          />
-          <Tile
-            title="Reviewable"
-            body="See diffs, cherry-pick the wins, drop the rest."
-          />
-        </div>
       </div>
-    </div>
-  )
-}
 
-function Logo() {
-  return (
-    <div className="flex flex-col gap-1" aria-hidden>
-      <span className="block w-5 h-[3px] rounded-full bg-white" />
-      <span className="block w-5 h-[3px] rounded-full bg-white/70" />
-      <span className="block w-5 h-[3px] rounded-full bg-white/40" />
-    </div>
-  )
-}
-
-function Tile({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="card p-3 text-left">
-      <h4 className="font-display font-medium text-sm">{title}</h4>
-      <p className="mt-1 text-xs text-ink-muted dark:text-ink-dark-muted leading-relaxed">
-        {body}
-      </p>
+      {/* Inline numbered list, not a card grid */}
+      <ol className="text-[12.5px] text-ink-500 dark:text-chalk-dim leading-relaxed max-w-[44ch] space-y-2.5">
+        <li>
+          <span className="font-mono text-[10.5px] mr-3 text-ink-400 dark:text-chalk-subtle">01</span>
+          One prompt becomes one branch becomes one worktree.
+        </li>
+        <li>
+          <span className="font-mono text-[10.5px] mr-3 text-ink-400 dark:text-chalk-subtle">02</span>
+          Claude streams structured events back as it works.
+        </li>
+        <li>
+          <span className="font-mono text-[10.5px] mr-3 text-ink-400 dark:text-chalk-subtle">03</span>
+          Cherry-pick the wins. Drop the misses. Main branch stays clean.
+        </li>
+      </ol>
     </div>
   )
 }
 
 function Header({ agent }: { agent: Agent }) {
   return (
-    <div className="px-7 pt-6 pb-5 border-b border-border dark:border-border-dark">
-      <div className="flex items-start justify-between gap-6">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <StateBadge state={agent.state} />
-          </div>
-          <h2 className="font-display font-semibold text-3xl tracking-tight text-ink dark:text-ink-dark mt-2 truncate">
-            {agent.id}
-          </h2>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="font-mono text-xs text-ink-subtle dark:text-ink-dark-subtle">
-              {agent.branch}
-            </span>
-            <span className="text-ink-subtle">·</span>
-            <span className="font-mono text-xs text-ink-subtle dark:text-ink-dark-subtle truncate">
-              {agent.worktreePath}
-            </span>
-          </div>
-        </div>
-        <ElapsedBlock agent={agent} />
+    <div className="px-8 pt-7 pb-5 border-b border-line dark:border-line-dark">
+      <div className="flex items-baseline gap-3 mb-3">
+        <StateGlyph state={agent.state} />
+        <span className="label">{stateLabel(agent.state)}</span>
+        <span className="font-mono text-[10.5px] text-ink-400 dark:text-chalk-subtle">
+          ·
+        </span>
+        <span className="font-mono text-[10.5px] text-ink-400 dark:text-chalk-subtle">
+          {agent.branch}
+        </span>
       </div>
 
-      {agent.usage && agent.usage.cost != null && (
-        <div className="mt-5 grid grid-cols-4 gap-2">
-          <Stat label="Turns" value={String(agent.usage.numTurns ?? 0)} />
-          <Stat label="Input" value={fmtTokens(agent.usage.inputTokens ?? 0)} />
-          <Stat label="Output" value={fmtTokens(agent.usage.outputTokens ?? 0)} />
-          <Stat label="Cost" value={`$${agent.usage.cost.toFixed(4)}`} highlight />
-        </div>
-      )}
-    </div>
-  )
-}
+      <h2 className="font-display text-3xl font-semibold tracking-tightest text-ink-900 dark:text-chalk truncate">
+        {agent.id}
+      </h2>
 
-function StateBadge({ state }: { state: Agent['state'] }) {
-  const cfg = {
-    queued: { color: 'bg-ink-subtle/15 text-ink-muted', label: 'Queued', dot: 'bg-ink-subtle' },
-    running: { color: 'bg-accent/12 text-accent dark:text-accent-300', label: 'Running', dot: 'bg-accent animate-pulse' },
-    done: { color: 'bg-success/12 text-success', label: 'Done', dot: 'bg-success' },
-    noop: { color: 'bg-warn/12 text-warn', label: 'No changes', dot: 'bg-warn' },
-    failed: { color: 'bg-danger/12 text-danger', label: 'Failed', dot: 'bg-danger' },
-  }[state]
-  return (
-    <span
-      className={clsx(
-        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-2xs font-medium',
-        cfg.color
-      )}
-    >
-      <span className={clsx('w-1.5 h-1.5 rounded-full', cfg.dot)} />
-      {cfg.label}
-    </span>
-  )
-}
-
-function ElapsedBlock({ agent }: { agent: Agent }) {
-  const value =
-    agent.elapsedMs != null
-      ? fmtElapsed(agent.elapsedMs)
-      : agent.startedAt
-        ? fmtElapsed(Date.now() - agent.startedAt)
-        : '—'
-  const isRunning = agent.state === 'running'
-  return (
-    <div
-      className={clsx(
-        'rounded-xl px-4 py-3 text-right shrink-0',
-        isRunning
-          ? 'bg-accent-gradient text-white shadow-glow'
-          : 'bg-surface-raised dark:bg-surface-dark-raised border border-border dark:border-border-dark'
-      )}
-    >
-      <p
-        className={clsx(
-          'text-2xs uppercase tracking-cap',
-          isRunning ? 'text-white/70' : 'text-ink-muted dark:text-ink-dark-muted'
+      {/* Inline metadata row — typeset, not card grid */}
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-7 gap-y-2">
+        <Metric label="elapsed" value={elapsedValue(agent)} accent={agent.state === 'running'} />
+        {agent.usage?.numTurns != null && (
+          <Metric label="turns" value={String(agent.usage.numTurns)} />
         )}
-      >
-        Elapsed
-      </p>
-      <p className="numeral text-2xl font-semibold mt-0.5">{value}</p>
+        {agent.usage?.inputTokens != null && (
+          <Metric label="in" value={fmtTokens(agent.usage.inputTokens)} />
+        )}
+        {agent.usage?.outputTokens != null && (
+          <Metric label="out" value={fmtTokens(agent.usage.outputTokens)} />
+        )}
+        {agent.usage?.cost != null && (
+          <Metric label="cost" value={`$${agent.usage.cost.toFixed(4)}`} />
+        )}
+      </div>
     </div>
   )
 }
 
-function Stat({
+function Metric({
   label,
   value,
-  highlight,
+  accent,
 }: {
   label: string
   value: string
-  highlight?: boolean
+  accent?: boolean
 }) {
   return (
-    <div
-      className={clsx(
-        'rounded-md px-3 py-2',
-        highlight
-          ? 'bg-accent/8 dark:bg-accent/15 border border-accent/20'
-          : 'bg-surface-raised dark:bg-surface-dark-raised border border-border dark:border-border-dark'
-      )}
-    >
-      <p className="text-2xs uppercase tracking-cap text-ink-muted dark:text-ink-dark-muted">
-        {label}
-      </p>
-      <p
+    <div className="flex items-baseline gap-1.5">
+      <span className="label">{label}</span>
+      <span
         className={clsx(
-          'numeral text-base font-semibold mt-0.5',
-          highlight ? 'text-accent dark:text-accent-300' : 'text-ink dark:text-ink-dark'
+          'num text-base font-medium tabular-nums',
+          accent ? 'text-ink-900 dark:text-chalk' : 'text-ink-700 dark:text-chalk-dim'
         )}
       >
         {value}
-      </p>
+      </span>
     </div>
   )
+}
+
+function elapsedValue(agent: Agent): string {
+  if (agent.elapsedMs != null) return fmtElapsed(agent.elapsedMs)
+  if (agent.startedAt) return fmtElapsed(Date.now() - agent.startedAt)
+  return 'queued'
+}
+
+function stateLabel(state: Agent['state']): string {
+  if (state === 'queued') return 'Queued'
+  if (state === 'running') return 'Running'
+  if (state === 'done') return 'Done'
+  if (state === 'noop') return 'No changes'
+  if (state === 'failed') return 'Failed'
+  return state
+}
+
+function StateGlyph({ state }: { state: Agent['state'] }) {
+  if (state === 'running') return <span className="dot-run" />
+  if (state === 'done') return <span className="dot-done" />
+  if (state === 'failed') return <span className="dot-failed" />
+  if (state === 'noop') return <span className="dot-noop" />
+  return <span className="dot-idle" />
 }
 
 function Tail({ agent }: { agent: Agent }) {
   if (agent.lastLines.length === 0) {
     return (
-      <div className="flex items-center gap-3 text-sm text-ink-muted dark:text-ink-dark-muted">
-        <span className="dot-active" />
-        Waiting for first event…
+      <div className="flex items-center gap-2.5 text-sm text-ink-400 dark:text-chalk-subtle">
+        <span className="dot-run" />
+        <span className="font-mono text-xs">waiting for first event</span>
       </div>
     )
   }
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       {agent.lastLines.map((line, i) => (
         <EventLine key={i} line={line} />
       ))}
@@ -221,8 +164,8 @@ function Tail({ agent }: { agent: Agent }) {
 function EventLine({ line }: { line: string }) {
   if (line.startsWith('$ ')) {
     return (
-      <p className="font-mono text-xs leading-relaxed text-ink dark:text-ink-dark">
-        <span className="text-accent font-bold">$</span>
+      <p className="font-mono text-xs leading-relaxed text-ink-900 dark:text-chalk">
+        <span className="text-ink-400 dark:text-chalk-subtle">$</span>
         <span className="ml-2">{line.slice(2)}</span>
       </p>
     )
@@ -232,11 +175,11 @@ function EventLine({ line }: { line: string }) {
     const m = rest.match(/^(\S+)\s+(.*)$/)
     return (
       <p className="font-mono text-xs leading-relaxed">
-        <span className="text-accent font-semibold">→</span>
+        <span className="text-ink-400 dark:text-chalk-subtle">→</span>
         {m ? (
           <>
-            <span className="ml-2 font-semibold text-ink dark:text-ink-dark">{m[1]}</span>
-            <span className="ml-3 text-ink-muted dark:text-ink-dark-muted">{m[2]}</span>
+            <span className="ml-2 font-semibold text-ink-900 dark:text-chalk">{m[1]}</span>
+            <span className="ml-3 text-ink-500 dark:text-chalk-dim">{m[2]}</span>
           </>
         ) : (
           <span className="ml-2">{rest}</span>
@@ -246,39 +189,37 @@ function EventLine({ line }: { line: string }) {
   }
   if (line.startsWith('← ')) {
     return (
-      <p className="font-mono text-xs leading-relaxed pl-5 text-ink-muted dark:text-ink-dark-muted">
-        <span className="text-ink-subtle">←</span>
+      <p className="font-mono text-xs leading-relaxed pl-5 text-ink-500 dark:text-chalk-dim">
+        <span className="text-ink-300 dark:text-chalk-subtle">←</span>
         <span className="ml-2">{line.slice(2)}</span>
       </p>
     )
   }
   if (line.startsWith('✓ ')) {
     return (
-      <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md
-                      bg-success/10 border border-success/20">
-        <span className="text-success font-bold">✓</span>
-        <span className="font-mono text-xs text-success font-medium">{line.slice(2)}</span>
-      </div>
+      <p className="font-mono text-xs leading-relaxed mt-3 text-ink-900 dark:text-chalk">
+        <span className="font-bold">✓</span>
+        <span className="ml-2 font-medium">{line.slice(2)}</span>
+      </p>
     )
   }
   if (line.startsWith('✗ ')) {
     return (
-      <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-md
-                      bg-danger/10 border border-danger/20">
-        <span className="text-danger font-bold">✗</span>
-        <span className="font-mono text-xs text-danger">{line.slice(2)}</span>
-      </div>
+      <p className="font-mono text-xs leading-relaxed text-state-failed">
+        <span className="font-bold">✗</span>
+        <span className="ml-2">{line.slice(2)}</span>
+      </p>
     )
   }
   if (line.startsWith('💭 ')) {
     return (
-      <p className="font-mono text-xs italic text-ink-subtle dark:text-ink-dark-subtle leading-relaxed">
+      <p className="font-mono text-xs italic text-ink-400 dark:text-chalk-subtle leading-relaxed">
         {line}
       </p>
     )
   }
   return (
-    <p className="font-display text-sm text-ink/85 dark:text-ink-dark/85 leading-relaxed py-1">
+    <p className="font-display text-sm text-ink-800 dark:text-chalk leading-relaxed py-0.5">
       {line}
     </p>
   )

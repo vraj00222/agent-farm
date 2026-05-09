@@ -140,12 +140,11 @@ export function App() {
   const platform = window.agentFarm?.platform ?? 'browser'
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
       <TitleBar meta={SAMPLE_META} totals={totals} />
 
-      <div className="flex-1 grid grid-cols-[18rem_1fr] min-h-0">
-        <aside className="border-r border-border dark:border-border-dark overflow-y-auto
-                          bg-bg/40 dark:bg-bg-dark/40 backdrop-blur">
+      <div className="flex-1 grid grid-cols-[17rem_1fr] min-h-0">
+        <aside className="border-r border-line dark:border-line-dark overflow-y-auto bg-bone dark:bg-coal">
           <AgentList
             agents={agents}
             selectedId={selectedId}
@@ -153,7 +152,7 @@ export function App() {
           />
         </aside>
 
-        <main className="overflow-hidden bg-surface dark:bg-surface-dark">
+        <main className="overflow-hidden bg-bone dark:bg-coal">
           <MainPanel agent={selectedAgent} />
         </main>
       </div>

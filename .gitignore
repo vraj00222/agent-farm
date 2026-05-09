@@ -1,5 +1,8 @@
 node_modules/
 .agent-farm/
 .vercel/
+.agents/
+.claude/
+skills-lock.json
 *.log
 .DS_Store

@@ -6,54 +6,39 @@ interface TitleBarProps {
 }
 
 /**
- * Top chrome — drag region for the window. Brand wordmark + logo mark
- * left, session metadata + counts right. Tightly packed but breathable.
+ * Top chrome. Asymmetric: brand on the left, session metadata typeset
+ * inline on the right (no pills, no boxes). Drag region for the window.
  */
 export function TitleBar({ meta, totals }: TitleBarProps) {
   return (
     <header
       className="drag flex items-center justify-between
-                 bg-bg/80 dark:bg-bg-dark/80
-                 backdrop-blur-xl
-                 border-b border-border dark:border-border-dark"
-      style={{ height: 'var(--titlebar-height)', paddingLeft: 96, paddingRight: 14 }}
+                 bg-bone dark:bg-coal
+                 border-b border-line dark:border-line-dark"
+      style={{ height: 'var(--titlebar-h)', paddingLeft: 90, paddingRight: 16 }}
     >
-      <div className="flex items-center gap-2">
-        <Mark />
-        <span className="font-display font-semibold text-[14px] tracking-tight">
+      <div className="flex items-baseline gap-2">
+        <span className="font-display font-semibold text-[13px] tracking-tightest text-ink-900 dark:text-chalk">
           Agent Farm
         </span>
-        <span className="ml-1 text-[11px] text-ink-subtle dark:text-ink-dark-subtle font-mono">
+        <span className="font-mono text-[10.5px] text-ink-400 dark:text-chalk-subtle">
           v{__APP_VERSION__}
         </span>
       </div>
 
-      <div className="flex items-center gap-2 no-drag">
-        <MetaPill label="claude" value={meta.claudeVersion ?? '—'} />
-        <MetaPill label="model" value={meta.model ?? 'default'} />
-        <MetaPill label="base" value={meta.baseSha.slice(0, 7)} mono />
-        <MetaPill label="repo" value={meta.repoName} />
-        <div className="w-px h-4 bg-border dark:bg-border-dark mx-1" />
-        <Counter label="running" count={totals.running} accent />
-        <Counter label="done" count={totals.done} success />
-        {totals.failed > 0 && <Counter label="failed" count={totals.failed} danger />}
+      <div className="flex items-baseline gap-5 no-drag">
+        <Field label="claude" value={meta.claudeVersion ?? 'unknown'} />
+        <Field label="model" value={meta.model ?? 'default'} />
+        <Field label="base" value={meta.baseSha.slice(0, 7)} mono />
+        <Field label="repo" value={meta.repoName} />
+        <span className="w-px h-3 bg-line dark:bg-line-dark" />
+        <Counts totals={totals} />
       </div>
     </header>
   )
 }
 
-function Mark() {
-  // Three stacked rectangles — visual stand-in for parallel agents.
-  return (
-    <div className="flex flex-col gap-[2px]" aria-hidden="true">
-      <div className="w-[10px] h-[2.5px] rounded-full bg-accent" />
-      <div className="w-[10px] h-[2.5px] rounded-full bg-accent/70" />
-      <div className="w-[10px] h-[2.5px] rounded-full bg-accent/40" />
-    </div>
-  )
-}
-
-function MetaPill({
+function Field({
   label,
   value,
   mono,
@@ -63,47 +48,78 @@ function MetaPill({
   mono?: boolean
 }) {
   return (
-    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md
-                    bg-surface-raised dark:bg-surface-dark-raised
-                    border border-border dark:border-border-dark">
-      <span className="text-[10px] uppercase tracking-cap text-ink-subtle dark:text-ink-dark-subtle">
+    <div className="flex items-baseline gap-1.5">
+      <span className="font-mono text-[9.5px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
         {label}
       </span>
-      <span className={`text-[11px] text-ink dark:text-ink-dark ${mono ? 'font-mono' : ''}`}>
+      <span
+        className={
+          'text-[11px] text-ink-800 dark:text-chalk ' +
+          (mono ? 'font-mono' : 'font-medium')
+        }
+      >
         {value}
       </span>
     </div>
   )
 }
 
-function Counter({
+function Counts({
+  totals,
+}: {
+  totals: { running: number; done: number; failed: number; queued: number }
+}) {
+  return (
+    <div className="flex items-baseline gap-3.5">
+      {totals.running > 0 && <CountBit label="run" n={totals.running} pulse />}
+      {totals.done > 0 && <CountBit label="done" n={totals.done} />}
+      {totals.failed > 0 && <CountBit label="fail" n={totals.failed} fail />}
+      {totals.queued > 0 && <CountBit label="que" n={totals.queued} muted />}
+      {totals.running + totals.done + totals.failed + totals.queued === 0 && (
+        <span className="font-mono text-[10px] text-ink-400 dark:text-chalk-subtle">
+          idle
+        </span>
+      )}
+    </div>
+  )
+}
+
+function CountBit({
   label,
-  count,
-  accent,
-  success,
-  danger,
+  n,
+  pulse,
+  fail,
+  muted,
 }: {
   label: string
-  count: number
-  accent?: boolean
-  success?: boolean
-  danger?: boolean
+  n: number
+  pulse?: boolean
+  fail?: boolean
+  muted?: boolean
 }) {
-  const color = danger
-    ? 'text-danger'
-    : accent && count > 0
-      ? 'text-accent'
-      : success
-        ? 'text-success'
-        : 'text-ink dark:text-ink-dark'
   return (
-    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md">
-      <span className="text-[10px] uppercase tracking-cap text-ink-subtle dark:text-ink-dark-subtle">
+    <div className="flex items-baseline gap-1.5">
+      <span className="font-mono text-[9.5px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
         {label}
       </span>
-      <span className={`numeral text-[12.5px] font-semibold ${color}`}>
-        {String(count).padStart(2, '0')}
+      <span
+        className={
+          'num text-[12px] font-semibold tabular-nums ' +
+          (fail
+            ? 'text-state-failed'
+            : muted
+              ? 'text-ink-400 dark:text-chalk-subtle'
+              : 'text-ink-900 dark:text-chalk')
+        }
+      >
+        {String(n).padStart(2, '0')}
       </span>
+      {pulse && (
+        <span
+          className="inline-block w-1.5 h-1.5 rounded-full bg-ink-900 dark:bg-chalk
+                     animate-ring-ink dark:animate-ring-chalk"
+        />
+      )}
     </div>
   )
 }
