@@ -5,6 +5,8 @@ import { MainPanel } from './components/MainPanel'
 import { PromptBar } from './components/PromptBar'
 import { StatusStrip } from './components/StatusStrip'
 import { WelcomeScreen } from './components/WelcomeScreen'
+import { CreateProjectModal, type CreateProjectInput } from './components/CreateProjectModal'
+import type { ClaudeModel } from './components/ModelPicker'
 import type { Agent, SessionMeta } from './types/agent'
 
 declare global {
@@ -24,8 +26,6 @@ const SAMPLE_META: SessionMeta = {
   model: null,
 }
 
-// Sample agents seeded only when the user picks "Quick start" — proves the
-// design language end-to-end without requiring a real project to be loaded.
 const SAMPLE_AGENTS: Agent[] = [
   {
     id: 'teach-me-how-use',
@@ -76,7 +76,7 @@ const SAMPLE_AGENTS: Agent[] = [
       '→ Write   /Users/v/Developer/404museum-create-foo-md-file/foo.md',
       '← File created successfully',
       '→ Bash    $ git add -A && git commit -m "docs: add foo.md with a short note on le…',
-      '← [agent/create-foo-md-file 058aaec] docs: add foo.md with a short note... (+2 lines)',
+      '← [agent/create-foo-md-file 058aaec] docs: add foo.md... (+2 lines)',
       'Created foo.md with two lines about legos and committed as 058aaec on agent/create-foo-md-file.',
       '✓ 3 turns · 120.3K in / 469 out · $0.1954 · 10.8s',
       'done in 12.7s · 1 commit · 1 file',
@@ -92,66 +92,125 @@ const SAMPLE_AGENTS: Agent[] = [
 
 type AppView =
   | { kind: 'welcome' }
-  | { kind: 'session'; meta: SessionMeta; agents: Agent[]; selectedId: string | null }
+  | {
+      kind: 'session'
+      meta: SessionMeta
+      agents: Agent[]
+      selectedId: string | null
+    }
 
 export function App() {
   const [view, setView] = useState<AppView>({ kind: 'welcome' })
+  const [model, setModel] = useState<ClaudeModel>('default')
+  const [createOpen, setCreateOpen] = useState(false)
 
   const platform = window.agentFarm?.platform ?? 'browser'
+
+  const enterSession = (meta: SessionMeta, agents: Agent[] = []) => {
+    setView({
+      kind: 'session',
+      meta,
+      agents,
+      selectedId: agents[0]?.id ?? null,
+    })
+  }
+
+  const handleOpenLocal = () => {
+    // TODO: real folder picker via main process IPC.
+    // Until then, route to the create flow which at least lets user
+    // type a parent folder.
+    alert('Open project (file picker) lands once main-process IPC ships. Use Create or Quick start for now.')
+  }
+
+  const handleOpenGitHub = () => {
+    alert('Open GitHub project (clone) lands once main-process IPC ships.')
+  }
+
+  const handleQuickStart = () => {
+    enterSession(SAMPLE_META, SAMPLE_AGENTS)
+  }
+
+  const handleCreate = (input: CreateProjectInput) => {
+    setCreateOpen(false)
+    // Stub: pretend the project was created. In the IPC version this
+    // call kicks off `git init`, then enters the session.
+    enterSession(
+      {
+        baseSha: '0000000000000000000000000000000000000000',
+        repoName: input.name,
+        claudeVersion: '2.1.132',
+        model: model === 'default' ? null : model,
+      },
+      []
+    )
+  }
 
   // ── Welcome screen ───────────────────────────────────────────────
   if (view.kind === 'welcome') {
     return (
-      <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
-        <header
-          className="drag flex items-center justify-end
-                     bg-bone dark:bg-coal
-                     border-b border-line dark:border-line-dark px-4"
-          style={{ height: 'var(--titlebar-h)', paddingLeft: 90 }}
-        >
-          <span className="font-mono text-[10px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
-            agent farm  ·  v{__APP_VERSION__}
-          </span>
-        </header>
+      <>
+        <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
+          <header
+            className="drag flex items-center justify-end
+                       bg-bone dark:bg-coal
+                       border-b border-line dark:border-line-dark px-4"
+            style={{ height: 'var(--titlebar-h)', paddingLeft: 90 }}
+          >
+            <span className="font-mono text-[10px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
+              agent farm  ·  v{__APP_VERSION__}
+            </span>
+          </header>
 
-        <main className="flex-1 overflow-hidden">
-          <WelcomeScreen
-            onOpenLocal={() => {
-              // TODO: wire to main process: dialog.showOpenDialog
-              alert('Open project: file picker arrives once IPC lands.')
-            }}
-            onOpenGitHub={() => {
-              // TODO: wire to main process: clone modal
-              alert('Open GitHub project: clone flow arrives once IPC lands.')
-            }}
-            onQuickStart={() =>
-              setView({
-                kind: 'session',
-                meta: SAMPLE_META,
-                agents: SAMPLE_AGENTS,
-                selectedId: SAMPLE_AGENTS[0]?.id ?? null,
-              })
-            }
-          />
-        </main>
+          <main className="flex-1 overflow-hidden">
+            <WelcomeScreen
+              onOpenLocal={handleOpenLocal}
+              onOpenGitHub={handleOpenGitHub}
+              onCreateProject={() => setCreateOpen(true)}
+              onDemo={handleQuickStart}
+            />
+          </main>
 
-        <StatusStrip platform={platform} message="welcome" />
-      </div>
+          <StatusStrip platform={platform} message="welcome" />
+        </div>
+
+        <CreateProjectModal
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          onCreate={handleCreate}
+        />
+      </>
     )
   }
 
   // ── Active session ──────────────────────────────────────────────
-  return <SessionView view={view} setView={setView} platform={platform} />
+  return (
+    <SessionView
+      view={view}
+      setView={setView}
+      platform={platform}
+      model={model}
+      onModelChange={setModel}
+    />
+  )
 }
 
 function SessionView({
   view,
   setView,
   platform,
+  model,
+  onModelChange,
 }: {
-  view: { kind: 'session'; meta: SessionMeta; agents: Agent[]; selectedId: string | null }
+  view: {
+    kind: 'session'
+    meta: SessionMeta
+    agents: Agent[]
+    selectedId: string | null
+  }
   setView: (v: AppView) => void
   platform: string
+  model: ClaudeModel
+  onModelChange: (m: ClaudeModel) => void
 }) {
   const { meta, agents, selectedId } = view
 
@@ -189,8 +248,10 @@ function SessionView({
       filesChanged: [],
       autoCommitted: false,
       lastLines: [
-        `$ claude -p --dangerously-skip-permissions "${prompt}"`,
-        '(stub: IPC not yet wired)',
+        `$ claude -p --dangerously-skip-permissions${
+          model !== 'default' ? ` --model ${model}` : ''
+        } "${prompt}"`,
+        '(stub: main-process spawn arrives once IPC lands)',
       ],
       usage: null,
     }
@@ -205,13 +266,25 @@ function SessionView({
     setView({ ...view, selectedId: id })
   }
 
+  // Reflect chosen model into the meta surfacing as the title bar field.
+  const metaWithModel = { ...meta, model: model === 'default' ? null : model }
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
-      <TitleBar meta={meta} totals={totals} />
+      <TitleBar
+        meta={metaWithModel}
+        totals={totals}
+        model={model}
+        onModelChange={onModelChange}
+      />
 
       <div className="flex-1 grid grid-cols-[17rem_1fr] min-h-0">
         <aside className="border-r border-line dark:border-line-dark overflow-y-auto bg-bone dark:bg-coal">
-          <AgentList agents={agents} selectedId={selectedId} onSelect={handleSelect} />
+          <AgentList
+            agents={agents}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+          />
         </aside>
 
         <main className="overflow-hidden bg-bone dark:bg-coal">
@@ -222,7 +295,11 @@ function SessionView({
       <PromptBar onSubmit={handleSubmit} />
       <StatusStrip
         platform={platform}
-        message={selectedAgent ? `selected ${selectedAgent.id}` : 'ready'}
+        message={
+          selectedAgent
+            ? `selected ${selectedAgent.id}`
+            : `ready · ${meta.repoName}`
+        }
       />
     </div>
   )

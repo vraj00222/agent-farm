@@ -4,7 +4,8 @@ import clsx from 'clsx'
 interface WelcomeScreenProps {
   onOpenLocal: () => void
   onOpenGitHub: () => void
-  onQuickStart: () => void
+  onCreateProject: () => void
+  onDemo?: () => void
 }
 
 const NAME = 'AGENT/FARM'
@@ -19,17 +20,34 @@ const NAME = 'AGENT/FARM'
 export function WelcomeScreen({
   onOpenLocal,
   onOpenGitHub,
-  onQuickStart,
+  onCreateProject,
+  onDemo,
 }: WelcomeScreenProps) {
   return (
     <div className="h-full w-full flex flex-col items-center justify-center px-12 py-16 bg-bone dark:bg-coal">
-      <div className="flex flex-col items-center gap-16 max-w-[860px] w-full">
+      <div className="flex flex-col items-center gap-12 max-w-[860px] w-full">
         <DotMatrixName text={NAME} />
         <Cards
           onOpenLocal={onOpenLocal}
           onOpenGitHub={onOpenGitHub}
-          onQuickStart={onQuickStart}
+          onCreateProject={onCreateProject}
         />
+        {onDemo && (
+          <button
+            type="button"
+            onClick={onDemo}
+            className="group inline-flex items-center gap-2 text-[12px] no-drag
+                       text-ink-500 dark:text-chalk-dim
+                       hover:text-ink-900 dark:hover:text-chalk
+                       transition-colors duration-150"
+            style={{ animationDelay: '700ms' }}
+          >
+            <span>Or try the demo session</span>
+            <span className="font-mono text-[14px] transition-transform duration-200 ease-quart-out group-hover:translate-x-0.5">
+              →
+            </span>
+          </button>
+        )}
       </div>
     </div>
   )
@@ -83,11 +101,11 @@ function DotMatrixName({ text }: { text: string }) {
 function Cards({
   onOpenLocal,
   onOpenGitHub,
-  onQuickStart,
+  onCreateProject,
 }: {
   onOpenLocal: () => void
   onOpenGitHub: () => void
-  onQuickStart: () => void
+  onCreateProject: () => void
 }) {
   return (
     <div
@@ -108,9 +126,9 @@ function Cards({
         icon={<GlobeIcon />}
       />
       <Card
-        title="Quick start"
-        sub="Demo session"
-        onClick={onQuickStart}
+        title="New project"
+        sub="Create local + git"
+        onClick={onCreateProject}
         icon={<PlusFolderIcon />}
         primary
       />

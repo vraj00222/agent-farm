@@ -1,15 +1,18 @@
 import type { SessionMeta } from '@/types/agent'
+import { ModelPicker, type ClaudeModel } from './ModelPicker'
 
 interface TitleBarProps {
   meta: SessionMeta
   totals: { running: number; done: number; failed: number; queued: number }
+  model: ClaudeModel
+  onModelChange: (m: ClaudeModel) => void
 }
 
 /**
  * Top chrome. Asymmetric: brand on the left, session metadata typeset
  * inline on the right (no pills, no boxes). Drag region for the window.
  */
-export function TitleBar({ meta, totals }: TitleBarProps) {
+export function TitleBar({ meta, totals, model, onModelChange }: TitleBarProps) {
   return (
     <header
       className="drag flex items-center justify-between
@@ -28,7 +31,7 @@ export function TitleBar({ meta, totals }: TitleBarProps) {
 
       <div className="flex items-baseline gap-5 no-drag">
         <Field label="claude" value={meta.claudeVersion ?? 'unknown'} />
-        <Field label="model" value={meta.model ?? 'default'} />
+        <ModelPicker value={model} onChange={onModelChange} />
         <Field label="base" value={meta.baseSha.slice(0, 7)} mono />
         <Field label="repo" value={meta.repoName} />
         <span className="w-px h-3 bg-line dark:bg-line-dark" />
