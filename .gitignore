@@ -1,8 +1,16 @@
 node_modules/
-.agent-farm/
-.vercel/
+out/
+dist/
+release/
+.vite-temp/
+
+# Local agent + skill state — per-developer
 .agents/
 .claude/
 skills-lock.json
+
+# Local Vercel link state (project moved to its own repo, kept here for safety)
+.vercel/
+
 *.log
 .DS_Store

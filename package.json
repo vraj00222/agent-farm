@@ -1,30 +1,36 @@
 {
   "name": "agent-farm",
-  "version": "0.0.5",
-  "description": "Run Claude Code in parallel across isolated git worktrees, then cherry-pick the wins.",
-  "bin": {
-    "agent-farm": "./bin/agent-farm.js"
+  "version": "0.1.0",
+  "description": "Run Claude Code agents in parallel, in isolated git worktrees, from a native Mac app.",
+  "main": "out/main/index.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "tsc --noEmit -p src/main/tsconfig.json && tsc --noEmit -p src/preload/tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json && electron-vite build",
+    "build:fast": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "npm run build:fast && electron-builder --mac --config electron-builder.yml",
+    "package:dir": "npm run build:fast && electron-builder --mac dir --config electron-builder.yml",
+    "typecheck": "tsc --noEmit -p src/main/tsconfig.json && tsc --noEmit -p src/preload/tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json"
   },
-  "files": [
-    "bin",
-    "src",
-    "README.md",
-    "LICENSE"
-  ],
-  "engines": {
-    "node": ">=18"
+  "devDependencies": {
+    "@types/node": "^20.16.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
   },
-  "license": "MIT",
-  "keywords": [
-    "claude",
-    "claude-code",
-    "git-worktree",
-    "agents",
-    "cli",
-    "parallel"
-  ],
   "dependencies": {
-    "ink": "^3.2.0",
-    "react": "^17.0.2"
+    "clsx": "^2.1.1"
   }
 }

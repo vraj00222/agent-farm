@@ -1,125 +1,95 @@
-# agent-farm
+# Agent Farm
 
-Run multiple Claude Code agents in parallel, each isolated in its own Git worktree, with a single terminal command. Type tasks, watch them spawn, review the diffs, cherry-pick the wins.
+Run Claude Code agents in parallel, each in its own isolated git worktree, from a native Mac app.
 
-## what it is
+> Marketing site lives in its own repo: [vraj00222/agent-farm-website](https://github.com/vraj00222/agent-farm-website)
+> Live: [website-topaz-phi-53.vercel.app](https://website-topaz-phi-53.vercel.app)
 
-agent-farm is a CLI harness for running N `claude` processes in parallel against the same repo. Each task gets its own sibling worktree (`../<repo>-<id>/`) on a fresh `agent/<id>` branch, so claude can edit autonomously without ever touching your working tree. When the work is done, you get a list of cherry-pick commands and the diffs are reviewable inside the TUI.
+## What it is
 
-It is **not** another AI product. It is process orchestration + filesystem isolation + a polished terminal UI around the existing `claude` CLI.
+A small Electron desktop app that orchestrates the `claude` CLI on your machine. Each task spawns a worktree, a branch, and a `claude -p` process. The app surfaces structured events as they stream in, lets you review diffs, and cherry-picks the wins. Main branch stays untouched until you choose to touch it.
 
-## requirements
+Not a hosted service. No server in the data path. Brings your own `claude` login (Pro, Max, Team, or API key).
 
-- Node.js 18+
-- `git` 2.20+ (worktree support)
-- `claude` CLI on PATH — `npm i -g @anthropic-ai/claude-code`
-- macOS, Linux, or WSL
+## Status
 
-## install
+**v0.1.0 — UI complete, runtime not yet wired.** The full visual surface ships: welcome screen, agent list, main panel, prompt bar, model picker, Create-project modal. Spawning is currently stubbed pending main-process IPC. See [`ROADMAP.md`](./ROADMAP.md) for the dependency-ordered path to v1.0.
+
+## Develop
 
 ```bash
 git clone git@github.com:vraj00222/agent-farm.git
 cd agent-farm
-npm install && npm link
+npm install
+npm run dev
 ```
 
-`npm link` symlinks `bin/agent-farm.js` into your global `node_modules/.bin`, so `agent-farm` is now available everywhere.
+This opens an Electron window with hot reload. Edit anything under `src/renderer/src/` and the renderer refreshes; edit `src/main/` and the main process restarts.
 
-## usage
-
-From inside any git repo with a clean tracked tree.
-
-### Open the TUI
+## Build
 
 ```bash
-agent-farm
+# Type-check + bundle (no DMG)
+npm run build
+
+# Build + package as unsigned macOS DMG (output: release/)
+npm run package
 ```
 
-The TUI opens with an empty side panel and a prompt box at the bottom. Type a task, press Enter, and an agent spawns in a fresh worktree right away. Type another, press Enter — it spawns in parallel (up to `--max` concurrent; the rest queue automatically). The side panel ticks elapsed times, the right pane shows the selected agent's tail or diff.
+## Tech stack
+
+- **Electron 33** + **electron-vite 2** (build) + **electron-builder 25** (packaging)
+- **TypeScript** end to end (main, preload, renderer)
+- **React 18** + **Tailwind 3.4** in the renderer
+- **Geist** + **JetBrains Mono** + **Doto** (dot-matrix display) via Google Fonts
+- Custom design system: pure tinted black & white, no accent color, semantic state via dots only. See [`PRODUCT.md`](./PRODUCT.md) for the full direction.
+
+## Layout
 
 ```
-type & enter   spawn a new task
-esc            clear the input
-↑ / ↓          select agent in the side panel
-tab            cycle  tail → diff(file 1) → diff(file 2) → … → tail
-shift+tab      cycle the other way
-ctrl+c         quit (SIGTERMs running agents)
+agent-farm/
+├── src/
+│   ├── main/                  Electron main process (Node)
+│   │   ├── index.ts
+│   │   └── tsconfig.json
+│   ├── preload/               contextBridge surface
+│   │   ├── index.ts
+│   │   └── tsconfig.json
+│   └── renderer/              React app (browser context)
+│       ├── index.html
+│       ├── tsconfig.json
+│       └── src/
+│           ├── App.tsx
+│           ├── components/    UI components
+│           ├── lib/           Pure helpers
+│           ├── styles/        Tailwind globals
+│           └── types/         Shared TS types
+├── electron.vite.config.ts    Build config (defines __APP_VERSION__)
+├── electron-builder.yml       Mac DMG packaging config (unsigned for now)
+├── tailwind.config.ts         Design tokens (palette, fonts, motion)
+├── postcss.config.cjs
+├── tsconfig.json              Project references
+├── PRODUCT.md                 Brand voice + design direction
+└── ROADMAP.md                 Dependency-ordered path to v1.0
 ```
 
-Header shows: `✓ claude <version>  ·  model <name|default>  ·  ⚠ skip-perms  ·  <sha>/<repo>  ·  <queued/running/done/failed counts>`.
+## Roadmap
 
-### Pre-load tasks from argv
+See [`ROADMAP.md`](./ROADMAP.md) for the full plan. Critical path to v1.0 in eight phases:
 
-```bash
-agent-farm "fix the typo in the readme"
+| phase | what |
+|---|---|
+| A | Typed IPC + preload + settings + logger |
+| B | Open / Create / Recent / Clone projects |
+| C | Spawn claude (port runner from CLI to TS), live event stream |
+| D | Diff view, cherry-pick action, conflict UI |
+| E | Claude detection on first launch, error toasts, loading states |
+| F | App icon, native macOS menu, settings panel |
+| G | Apple Developer ID signing + notarization + GitHub Releases |
+| H | Real screenshots, demo video, custom domain, Show HN |
 
-agent-farm \
-  "fix the typo in the readme" \
-  "add a license header to all .js files in src/" \
-  "@bench: benchmark the slugify function and write the result to BENCH.md"
+~10 focused dev days, ~3 weeks calendar.
 
-agent-farm --max 2 "p1" "p2" "p3" "p4"           # 2 run, 2 queue
-agent-farm --model opus "review src/auth.ts for bugs"
-```
+## License
 
-These behave identically to typing the prompts in the input box — they're just queued before the TUI mounts so you can watch them spawn.
-
-### Subcommands
-
-```bash
-agent-farm status           # print state.json table — works mid-run or after
-agent-farm logs <id>        # render an agent's JSONL run log
-```
-
-### Plain log stream (CI / pipes)
-
-When stdout is not a TTY (or `CI=1` / `AGENT_FARM_NO_TUI=1`), the TUI is replaced by tagged log lines. Use this for CI runs:
-
-```bash
-AGENT_FARM_NO_TUI=1 agent-farm "p1" "p2" 2>&1 | tee farm.log
-```
-
-Stream mode requires at least one prompt on argv — there's no input box without a TTY.
-
-## how the worktrees work
-
-Each prompt becomes:
-
-- `agent/<id>` — a new branch off your current HEAD
-- `../<repo>-<id>/` — a sibling worktree on that branch
-- one `claude -p --dangerously-skip-permissions [--model X] "<prompt>"` process running in it
-
-The first thing you see in each agent's tail is the literal command being executed, so there's no mystery about what claude is doing in the worktree.
-
-When claude finishes, agent-farm prints the `git cherry-pick agent/<id>` line for each successful task plus the matching `git worktree remove …` cleanup. Worktrees are kept until you remove them, so failed runs are inspectable.
-
-## hybrid commit handling
-
-Claude Code in `-p` mode often does the work but doesn't commit. That breaks `git cherry-pick`. Two-layer fix:
-
-1. **Asked to commit.** Each prompt is wrapped with an instruction telling claude to `git add -A && git commit -m "..."` when done. Claude usually does, with a sensible message.
-2. **Auto-commit fallback.** If after claude exits the worktree is still dirty, agent-farm runs `git add -A && git commit -m "agent-farm: <id> (auto-commit)"`. The agent's work is always at least one commit on `agent/<id>`. Cherry-pick always works.
-
-`autoCommitted: true` is flagged in the summary line so you can tell which were claude's commits vs. ours.
-
-## why `--dangerously-skip-permissions`?
-
-Headless Claude Code can't answer permission prompts — there's no human in the loop during a parallel run. The blast radius is the worktree, not your main checkout, so claude can only modify files in `../<repo>-<id>/`. You always review the diff before cherry-picking. This is the standard pattern for Claude Code in CI / agent-orchestrator contexts.
-
-## state on disk
-
-```
-your-repo/
-├── .agent-farm/
-│   ├── state.json              # written atomically on every transition
-│   └── runs/
-│       ├── fix-auth-1714000000000.log     # JSONL: spawn / stdout / stderr / exit
-│       └── bench-1714000005000.log
-└── ...
-```
-
-`state.json` is the source of truth while a session runs, and is what `agent-farm status` reads. Run logs are append-only JSONL — one event per line — designed for replay and observability.
-
-## license
-
-MIT. See `LICENSE`.
+MIT. See [`LICENSE`](./LICENSE).
