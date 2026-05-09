@@ -84,7 +84,9 @@ class State extends EventEmitter {
     if (!a) return
     a.lastLines = a.lastLines || []
     a.lastLines.push(line)
-    if (a.lastLines.length > 5) a.lastLines.shift()
+    // Bigger rolling buffer so navigating between agents shows real history,
+    // not just the last 5 events. JSONL log file is still the full record.
+    if (a.lastLines.length > 200) a.lastLines.shift()
     // Don't flush state.json on every line — too noisy.
     this.emit('line', { id, kind, line })
     // Also fire 'change' so subscribers (TUI / stream renderer) re-render

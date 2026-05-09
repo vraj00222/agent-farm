@@ -253,7 +253,7 @@ function printSummary(results) {
       `  ${glyph} ${c.cyan(idCol)}  ${c.dim(elapsed)}  ${detail}\n`
     )
     if (r.state === 'failed' && (r.lastLines || []).length > 0) {
-      for (const line of r.lastLines) {
+      for (const line of r.lastLines.slice(-5)) {
         process.stdout.write(`     ${c.dim('│')} ${c.dim(line)}\n`)
       }
     }
