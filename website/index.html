@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Run Claude Code agents in parallel — each in its own isolated git worktree. Mac-native desktop app and CLI." />
+    <meta name="theme-color" content="#5765F2" />
+    <meta property="og:title" content="Agent Farm — Run Claude Code in parallel" />
+    <meta property="og:description" content="Spawn many Claude Code agents at once, each isolated in its own git worktree. Review the diffs, cherry-pick the wins." />
+    <meta property="og:type" content="website" />
+    <title>Agent Farm — Run Claude Code in parallel</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect y='3' width='16' height='2' rx='1' fill='%235765F2'/%3E%3Crect y='7' width='16' height='2' rx='1' fill='%235765F2' opacity='.7'/%3E%3Crect y='11' width='16' height='2' rx='1' fill='%235765F2' opacity='.4'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <!-- ── Header ───────────────────────────────────────────────────── -->
+    <header class="site-header">
+      <div class="container nav">
+        <a href="#" class="brand">
+          <span class="mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </span>
+          <span>Agent Farm</span>
+        </a>
+        <nav class="nav-links">
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#cli">CLI</a>
+          <a href="https://github.com/vraj00222/agent-farm" target="_blank" rel="noreferrer">GitHub ↗</a>
+        </nav>
+      </div>
+    </header>
+
+    <!-- ── Hero ─────────────────────────────────────────────────────── -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <span class="eyebrow">
+              <span class="dot"></span>
+              v0.0.5 is now available
+            </span>
+            <h1 class="display">
+              Run Claude Code <br />
+              <span class="grad">in parallel.</span>
+            </h1>
+            <p class="lede">
+              Spawn many <code>claude</code> agents at once — each isolated
+              in its own git worktree. Watch them work in real time, review
+              the diffs, cherry-pick the wins.
+            </p>
+            <div class="cta-row">
+              <a class="btn btn-primary" href="#download">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path d="M14.5 11.5c-.94 1.79-1.97 3.49-3.34 3.51-1.37.02-1.81-.81-3.36-.81-1.55 0-2.04.78-3.34.83-1.32.05-2.32-1.93-3.27-3.71C-.92 7.78.55 2.55 3.04 1.7 4.2 1.32 5.31 2.2 6.16 2.2c.86 0 2.34-1.07 3.92-.92.66.03 2.5.27 3.69 2.04-3.16 1.84-2.65 6.06.73 8.18zM10.4.05c-.84.97-2.21 1.71-3.5 1.61-.18-1.34.5-2.74 1.27-3.6.97-1.05 2.6-1.66 3.7-1.66.13 1.42-.45 2.7-1.47 3.65z" fill="currentColor" transform="translate(2 1)"/>
+                </svg>
+                Download for macOS
+                <span class="kbd-hint">·  Apple Silicon + Intel</span>
+              </a>
+              <a class="btn btn-secondary" href="#cli">
+                Or use the CLI
+                <span class="arrow">→</span>
+              </a>
+            </div>
+            <p class="micro">
+              Free · MIT · No telemetry · Brings your own Claude Code login
+            </p>
+          </div>
+
+          <!-- App preview mockup -->
+          <div class="hero-art" aria-hidden="true">
+            <div class="window">
+              <div class="window-chrome">
+                <div class="traffic">
+                  <span class="tl tl-r"></span>
+                  <span class="tl tl-y"></span>
+                  <span class="tl tl-g"></span>
+                </div>
+                <div class="window-title">
+                  <span class="logo-mini"><i></i><i></i><i></i></span>
+                  Agent Farm <span class="ver">v0.0.5</span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-pill">claude 2.1.132</span>
+                  <span class="meta-pill">3 running</span>
+                  <span class="meta-pill done">7 done</span>
+                </div>
+              </div>
+              <div class="window-body">
+                <aside class="side">
+                  <div class="side-label">Sessions <i>10</i></div>
+                  <div class="row sel">
+                    <span class="rowdot dot-run"></span>
+                    <div>
+                      <div class="rowtitle">fix-jwt-expiry-bug</div>
+                      <div class="rowsub">Running · 14.2s</div>
+                    </div>
+                    <span class="elapsed">14s</span>
+                  </div>
+                  <div class="row">
+                    <span class="rowdot dot-run"></span>
+                    <div>
+                      <div class="rowtitle">refactor-auth-middleware</div>
+                      <div class="rowsub">Running · 32.0s</div>
+                    </div>
+                    <span class="elapsed">32s</span>
+                  </div>
+                  <div class="row">
+                    <span class="rowdot dot-run"></span>
+                    <div>
+                      <div class="rowtitle">add-rate-limiting-test</div>
+                      <div class="rowsub">Running · 8.1s</div>
+                    </div>
+                    <span class="elapsed">8s</span>
+                  </div>
+                  <div class="row">
+                    <span class="rowdot dot-done"></span>
+                    <div>
+                      <div class="rowtitle">migrate-to-zod-v4</div>
+                      <div class="rowsub">Done · 2 commits</div>
+                    </div>
+                    <span class="elapsed">42s</span>
+                  </div>
+                  <div class="row">
+                    <span class="rowdot dot-done"></span>
+                    <div>
+                      <div class="rowtitle">remove-dead-code</div>
+                      <div class="rowsub">Done · 1 commit</div>
+                    </div>
+                    <span class="elapsed">19s</span>
+                  </div>
+                </aside>
+                <main class="main">
+                  <div class="main-head">
+                    <div>
+                      <div class="state-pill"><i></i> Running</div>
+                      <h3>fix-jwt-expiry-bug</h3>
+                      <div class="branch">agent/fix-jwt-expiry-bug</div>
+                    </div>
+                    <div class="elapsed-block">
+                      <div class="elabel">Elapsed</div>
+                      <div class="evalue">14.2s</div>
+                    </div>
+                  </div>
+                  <div class="main-body">
+                    <p class="ev cmd">
+                      <span>$</span>
+                      claude -p --dangerously-skip-permissions "fix the JWT expiry bug"
+                    </p>
+                    <p class="ev tu">
+                      <span>→</span> <b>Read</b>
+                      src/auth/middleware.ts
+                    </p>
+                    <p class="ev tr">← export class JWTMiddleware { … (+87 lines)</p>
+                    <p class="ev tu">
+                      <span>→</span> <b>Read</b>
+                      src/auth/jwt-utils.ts
+                    </p>
+                    <p class="ev tr">← function verifyToken(token: string) { … (+52 lines)</p>
+                    <p class="ev txt">
+                      Found the bug — the iat claim is checked against the wrong
+                      Date.now() reference. Patching middleware.ts and adding a test.
+                    </p>
+                    <p class="ev tu">
+                      <span>→</span> <b>Edit</b>
+                      src/auth/middleware.ts
+                    </p>
+                    <p class="ev tr">← The file has been updated.</p>
+                    <p class="ev tu">
+                      <span>→</span> <b>Bash</b>
+                      $ npm test
+                    </p>
+                  </div>
+                </main>
+              </div>
+              <div class="window-foot">
+                <div class="prompt-box">
+                  <span class="prompt-arrow">›</span>
+                  <span class="prompt-text">add a stress test for concurrent expiry checks</span>
+                  <span class="cursor"></span>
+                  <button class="prompt-btn">Spawn ↵</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Features ─────────────────────────────────────────────────── -->
+    <section id="features" class="features">
+      <div class="container">
+        <span class="section-eyebrow">Features</span>
+        <h2 class="section-title">Built for the way you actually work.</h2>
+        <p class="section-lede">
+          Most coding agent tools are built around one agent at a time.
+          Agent Farm assumes you want six.
+        </p>
+
+        <div class="feat-grid">
+          <article class="feat">
+            <div class="feat-num">01</div>
+            <h3>Isolated git worktrees</h3>
+            <p>
+              Each task runs in <code>../&lt;repo&gt;-&lt;id&gt;/</code> on a
+              fresh <code>agent/&lt;id&gt;</code> branch. Claude can edit anything
+              it wants — your main checkout never sees a byte of it.
+            </p>
+          </article>
+
+          <article class="feat">
+            <div class="feat-num">02</div>
+            <h3>Real parallelism</h3>
+            <p>
+              Three agents run at once by default. The fourth queues. Zero
+              file conflicts because zero shared filesystem state — that's
+              what worktrees buy you.
+            </p>
+          </article>
+
+          <article class="feat">
+            <div class="feat-num">03</div>
+            <h3>Live event view</h3>
+            <p>
+              Watch each agent's tool calls, file reads, edits, bash
+              invocations and assistant messages stream in. Token usage and
+              cost surface live, per agent.
+            </p>
+          </article>
+
+          <article class="feat">
+            <div class="feat-num">04</div>
+            <h3>Cherry-pick the wins</h3>
+            <p>
+              Diffs render in the right pane. Accept the ones that worked
+              with one click, ditch the ones that went off the rails, keep
+              the worktree around for inspection.
+            </p>
+          </article>
+
+          <article class="feat">
+            <div class="feat-num">05</div>
+            <h3>Hybrid commit handling</h3>
+            <p>
+              Each prompt asks claude to commit. If it forgets, Agent Farm
+              auto-commits whatever was left. Cherry-pick always works,
+              every time.
+            </p>
+          </article>
+
+          <article class="feat">
+            <div class="feat-num">06</div>
+            <h3>Bring your own login</h3>
+            <p>
+              No new account, no new bill. Agent Farm shells out to your
+              existing <code>claude</code> CLI — Pro, Max, Team, or API
+              key. Your usage, your billing.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── How it works ─────────────────────────────────────────────── -->
+    <section id="how-it-works" class="how">
+      <div class="container">
+        <div class="how-grid">
+          <div class="how-copy">
+            <span class="section-eyebrow">How it works</span>
+            <h2 class="section-title">Type a task. Get N worktrees.</h2>
+            <p class="section-lede">
+              Every prompt becomes a branch, a worktree, and a claude
+              process. Three primitives, end to end.
+            </p>
+            <ol class="steps">
+              <li>
+                <span>1</span>
+                You type a task — Agent Farm slugifies it into an ID.
+              </li>
+              <li>
+                <span>2</span>
+                <code>git worktree add</code> creates a sibling folder on a
+                fresh <code>agent/&lt;id&gt;</code> branch.
+              </li>
+              <li>
+                <span>3</span>
+                <code>claude</code> spawns inside that folder with
+                <code>--output-format stream-json</code>.
+              </li>
+              <li>
+                <span>4</span>
+                Events stream back — tool calls, edits, bash runs, results.
+                You watch, navigate, review.
+              </li>
+              <li>
+                <span>5</span>
+                When you're happy: <code>git cherry-pick agent/&lt;id&gt;</code>.
+                One line, copy-pasteable.
+              </li>
+            </ol>
+          </div>
+
+          <pre class="how-code"><code><span class="c-cmt"># inside any clean git repo</span>
+$ <span class="c-cmd">agent-farm</span>
+
+<span class="c-key">type & enter</span>   spawn a new task
+<span class="c-key">↑ / ↓</span>          select agent
+<span class="c-key">tab</span>            tail / diff
+<span class="c-key">esc</span>            clear input
+<span class="c-key">ctrl+c</span>         quit
+
+<span class="c-prompt">›</span> fix the JWT expiry bug in src/auth
+<span class="c-prompt">›</span> add a test for the rate limiter
+<span class="c-prompt">›</span> migrate the user schema to zod v4
+
+<span class="c-ok">●</span> 3 running   <span class="c-done">●</span> 0 done
+</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CLI ──────────────────────────────────────────────────────── -->
+    <section id="cli" class="cli">
+      <div class="container">
+        <div class="cli-grid">
+          <div>
+            <span class="section-eyebrow">Also a CLI</span>
+            <h2 class="section-title">Same engine, terminal-native.</h2>
+            <p class="section-lede">
+              Don't want a GUI? <code>npm i -g agent-farm</code> and the
+              same orchestrator runs in your terminal. Perfect for SSH
+              sessions, CI pipelines, and remote dev boxes.
+            </p>
+            <a class="btn btn-secondary" href="https://github.com/vraj00222/agent-farm" target="_blank" rel="noreferrer">
+              Install via npm
+              <span class="arrow">→</span>
+            </a>
+          </div>
+          <pre class="cli-code"><code><span class="c-cmt"># install</span>
+$ npm i -g agent-farm
+
+<span class="c-cmt"># open the live TUI</span>
+$ agent-farm
+
+<span class="c-cmt"># pre-load tasks</span>
+$ agent-farm \
+    "fix the JWT bug" \
+    "add a rate limiting test"
+
+<span class="c-cmt"># inspect a finished session</span>
+$ agent-farm status
+$ agent-farm logs fix-jwt-bug
+</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Download ─────────────────────────────────────────────────── -->
+    <section id="download" class="download">
+      <div class="container download-inner">
+        <h2 class="display-sm">Get Agent Farm</h2>
+        <p class="section-lede center">
+          macOS app, free and open-source. No signup. No telemetry.
+        </p>
+        <div class="download-row">
+          <a class="btn btn-primary btn-xl" href="https://github.com/vraj00222/agent-farm/releases/latest" target="_blank" rel="noreferrer">
+            <svg width="22" height="22" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M14.5 11.5c-.94 1.79-1.97 3.49-3.34 3.51-1.37.02-1.81-.81-3.36-.81-1.55 0-2.04.78-3.34.83-1.32.05-2.32-1.93-3.27-3.71C-.92 7.78.55 2.55 3.04 1.7 4.2 1.32 5.31 2.2 6.16 2.2c.86 0 2.34-1.07 3.92-.92.66.03 2.5.27 3.69 2.04-3.16 1.84-2.65 6.06.73 8.18zM10.4.05c-.84.97-2.21 1.71-3.5 1.61-.18-1.34.5-2.74 1.27-3.6.97-1.05 2.6-1.66 3.7-1.66.13 1.42-.45 2.7-1.47 3.65z" fill="currentColor" transform="translate(2 1)"/>
+            </svg>
+            Download for macOS
+          </a>
+          <a class="btn btn-ghost btn-xl" href="https://github.com/vraj00222/agent-farm" target="_blank" rel="noreferrer">
+            View source on GitHub
+            <span class="arrow">↗</span>
+          </a>
+        </div>
+        <p class="micro center">
+          Apple Silicon (M1+) and Intel. Requires
+          <a href="https://docs.anthropic.com/en/docs/claude-code" target="_blank" rel="noreferrer">claude code</a>
+          installed and logged in.
+        </p>
+      </div>
+    </section>
+
+    <!-- ── Footer ───────────────────────────────────────────────────── -->
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <a href="#" class="brand">
+            <span class="mark"><span></span><span></span><span></span></span>
+            <span>Agent Farm</span>
+          </a>
+          <p class="micro foot-tag">Run Claude Code in parallel.</p>
+        </div>
+        <div>
+          <span class="foot-h">Product</span>
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#cli">CLI</a>
+          <a href="#download">Download</a>
+        </div>
+        <div>
+          <span class="foot-h">Project</span>
+          <a href="https://github.com/vraj00222/agent-farm" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="https://github.com/vraj00222/agent-farm/issues" target="_blank" rel="noreferrer">Issues</a>
+          <a href="https://github.com/vraj00222/agent-farm/releases" target="_blank" rel="noreferrer">Releases</a>
+        </div>
+        <div>
+          <span class="foot-h">Made with</span>
+          <a href="https://docs.anthropic.com/en/docs/claude-code" target="_blank" rel="noreferrer">Claude Code</a>
+          <span class="micro" style="opacity: .5">MIT licensed</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

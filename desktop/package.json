@@ -1,0 +1,36 @@
+{
+  "name": "agent-farm-desktop",
+  "version": "0.0.1",
+  "description": "Run Claude Code agents in parallel — Mac desktop edition.",
+  "main": "out/main/index.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "tsc --noEmit -p src/main/tsconfig.json && tsc --noEmit -p src/preload/tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json && electron-vite build",
+    "build:fast": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "npm run build:fast && electron-builder --mac --config electron-builder.yml",
+    "package:dir": "npm run build:fast && electron-builder --mac dir --config electron-builder.yml",
+    "typecheck": "tsc --noEmit -p src/main/tsconfig.json && tsc --noEmit -p src/preload/tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1"
+  }
+}
