@@ -350,6 +350,12 @@ hr { border: 0; }
   color: var(--paper);
   transform: translateY(-1px);
 }
+.cta-apple {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  transform: translateY(2px);
+}
 .cta-arrow {
   font-family: var(--mono);
   font-weight: 400;
