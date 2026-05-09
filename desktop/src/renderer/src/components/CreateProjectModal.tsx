@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 
-export type ProjectTemplate = 'empty' | 'next' | 'gstack'
+export type ProjectTemplate = 'empty' | 'next'
 
 export interface CreateProjectInput {
   name: string
@@ -162,7 +162,7 @@ export function CreateProjectModal({
           </Field>
 
           <Field label="Template">
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 gap-2.5">
               <TemplateCard
                 value="empty"
                 selected={template === 'empty'}
@@ -178,15 +178,6 @@ export function CreateProjectModal({
                 title="Next.js"
                 sub="TypeScript, Tailwind"
                 icon={<NextIcon />}
-              />
-              <TemplateCard
-                value="gstack"
-                selected={template === 'gstack'}
-                onSelect={setTemplate}
-                title="gstack"
-                sub="Agent workflow template"
-                icon={<GIcon />}
-                badge="NEW"
               />
             </div>
           </Field>
@@ -299,14 +290,6 @@ function NextIcon() {
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
       <circle cx="10" cy="10" r="7.5" />
       <path d="M7 6.5v7M13 5.5v9M7 6.5l5.5 7.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function GIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M14 7.5a4.5 4.5 0 1 0 1.5 4H10" />
     </svg>
   )
 }
