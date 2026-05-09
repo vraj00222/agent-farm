@@ -4,6 +4,10 @@ Run Claude Code agents in parallel, each in its own isolated git worktree, from 
 
 > Marketing site lives in its own repo: [vraj00222/agent-farm-website](https://github.com/vraj00222/agent-farm-website)
 > Live: [website-topaz-phi-53.vercel.app](https://website-topaz-phi-53.vercel.app)
+> 
+
+https://github.com/user-attachments/assets/c2e31fc6-b019-488f-b631-95ff94eba6ae
+
 
 ## What it is
 
