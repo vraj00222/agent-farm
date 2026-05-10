@@ -127,10 +127,7 @@ export function App() {
     const result = await api.project.open(path)
     if (!result.ok) {
       if (result.reason === 'cancelled') return
-      const msg =
-        result.reason === 'not_a_git_repo'
-          ? `Not a git repo: ${result.path}. Run "git init" in that folder first.`
-          : `Couldn't open ${result.path}: ${result.message}`
+      const msg = `Couldn't open ${result.path}: ${result.message}`
       setOpenError(msg)
       void api.log({ level: 'warn', message: 'open project failed', data: { result } })
       void refreshRecents()
@@ -145,6 +142,11 @@ export function App() {
       },
       [],
     )
+    if (!result.project.isGitRepo) {
+      setOpenError(
+        `Opened ${result.project.repoName} (not a git repo — agent spawning needs git, but you can browse and preview).`,
+      )
+    }
     void refreshRecents()
   }
 

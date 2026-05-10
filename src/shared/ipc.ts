@@ -11,14 +11,24 @@
 // ── Project lifecycle ────────────────────────────────────────────────
 
 export interface ProjectInfo {
-  /** Absolute path to the repo root (`git rev-parse --show-toplevel`). */
+  /** Absolute path to the project root. For git repos this is the repo
+   *  top-level (`git rev-parse --show-toplevel`); for non-git folders it's
+   *  exactly the path the user picked. */
   path: string
   /** Last segment of `path`. Used as a display name. */
   repoName: string
-  /** HEAD SHA at open time. Empty string for a freshly-init'd repo with no commits. */
+  /** HEAD SHA at open time. Empty for non-git or fresh git repos. */
   baseSha: string
-  /** True if `git status --porcelain` returned anything. */
+  /** True if the folder is a git working tree. Non-git folders open with
+   *  reduced affordances — you can preview / edit but worktree-based agent
+   *  spawning needs a git repo. The session view should offer
+   *  "Initialize as git" if this is false. */
+  isGitRepo: boolean
+  /** True if `git status --porcelain` returned anything. False for non-git. */
   dirty: boolean
+  /** True if the folder contains an `index.html` at the root — drives the
+   *  preview affordance. */
+  hasIndexHtml: boolean
 }
 
 export interface RecentProject {
@@ -31,7 +41,6 @@ export interface RecentProject {
 export type ProjectOpenResult =
   | { ok: true; project: ProjectInfo }
   | { ok: false; reason: 'cancelled' }
-  | { ok: false; reason: 'not_a_git_repo'; path: string }
   | { ok: false; reason: 'unreadable'; path: string; message: string }
 
 // ── Claude detection ─────────────────────────────────────────────────
