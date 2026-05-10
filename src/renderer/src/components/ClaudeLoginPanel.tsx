@@ -29,7 +29,10 @@ export function ClaudeLoginPanel({
   const [rechecking, setRechecking] = useState(false)
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-bone dark:bg-coal">
+    <div
+      className="no-drag absolute inset-x-0 bottom-0 z-30 flex flex-col bg-bone dark:bg-coal"
+      style={{ top: 'var(--titlebar-h)' }}
+    >
       <div
         className="flex items-center justify-between gap-4 px-5 py-3
                    border-b border-line dark:border-line-dark"
