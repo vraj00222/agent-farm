@@ -1,29 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TitleBar } from './components/TitleBar'
 import { AgentList } from './components/AgentList'
 import { MainPanel } from './components/MainPanel'
 import { PromptBar } from './components/PromptBar'
 import { StatusStrip } from './components/StatusStrip'
 import { WelcomeScreen } from './components/WelcomeScreen'
+import { Onboarding } from './components/Onboarding'
 import { CreateProjectModal, type CreateProjectInput } from './components/CreateProjectModal'
 import type { ClaudeModel } from './components/ModelPicker'
 import type { Agent, SessionMeta } from './types/agent'
+import type { AgentFarmApi, ClaudeStatus, RecentProject } from '../../shared/ipc'
 
 declare global {
   interface Window {
-    agentFarm?: {
-      platform: string
-      arch: string
-      versions: { node: string; chrome: string; electron: string }
-    }
+    agentFarm?: AgentFarmApi
   }
-}
-
-const SAMPLE_META: SessionMeta = {
-  baseSha: '94f83c8f12a4d1e9b3c2a8f4d6e1c5b9a2f8e7d1',
-  repoName: '404museum',
-  claudeVersion: '2.1.132',
-  model: null,
 }
 
 const SAMPLE_AGENTS: Agent[] = [
@@ -47,48 +38,17 @@ const SAMPLE_AGENTS: Agent[] = [
       'session started (claude-opus-4-7)',
       '→ Read    /Users/v/Developer/404museum-teach-me-how-use/package.json',
       '← 1   { ... (+9 lines)',
-      '→ Read    /Users/v/Developer/404museum-teach-me-how-use/vercel.json',
-      '← 1   { ... (+5 lines)',
-      '→ Read    /Users/v/Developer/404museum-teach-me-how-use/src/index.ts',
-      '← 1   // 404 Museum, Main entry point ... (+617 lines)',
-      '→ Glob    src/**/*.ts',
     ],
     usage: null,
   },
-  {
-    id: 'create-foo-md-file',
-    branch: 'agent/create-foo-md-file',
-    worktreePath: '/Users/v/Developer/404museum-create-foo-md-file',
-    prompt: 'create a foo.md with two lines about legos',
-    state: 'done',
-    startedAt: Date.now() - 12_700,
-    endedAt: Date.now() - 0,
-    elapsedMs: 12_700,
-    exitCode: 0,
-    pid: 14201,
-    commits: ['058aaec docs: add foo.md with a short note on legos'],
-    filesChanged: ['foo.md'],
-    autoCommitted: false,
-    lastLines: [
-      '$ claude -p --dangerously-skip-permissions "create a foo.md with two lines about legos"',
-      'worktree: /Users/v/Developer/404museum-create-foo-md-file',
-      'session started (claude-opus-4-7)',
-      '→ Write   /Users/v/Developer/404museum-create-foo-md-file/foo.md',
-      '← File created successfully',
-      '→ Bash    $ git add -A && git commit -m "docs: add foo.md with a short note on le…',
-      '← [agent/create-foo-md-file 058aaec] docs: add foo.md... (+2 lines)',
-      'Created foo.md with two lines about legos and committed as 058aaec on agent/create-foo-md-file.',
-      '✓ 3 turns · 120.3K in / 469 out · $0.1954 · 10.8s',
-      'done in 12.7s · 1 commit · 1 file',
-    ],
-    usage: {
-      cost: 0.1954,
-      inputTokens: 120_300,
-      outputTokens: 469,
-      numTurns: 3,
-    },
-  },
 ]
+
+const DEMO_META: SessionMeta = {
+  baseSha: '94f83c8f12a4d1e9b3c2a8f4d6e1c5b9a2f8e7d1',
+  repoName: '404museum',
+  claudeVersion: 'demo',
+  model: null,
+}
 
 type AppView =
   | { kind: 'welcome' }
@@ -103,8 +63,48 @@ export function App() {
   const [view, setView] = useState<AppView>({ kind: 'welcome' })
   const [model, setModel] = useState<ClaudeModel>('default')
   const [createOpen, setCreateOpen] = useState(false)
+  const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | 'loading'>('loading')
+  const [bypassOnboarding, setBypassOnboarding] = useState(false)
+  const [recents, setRecents] = useState<RecentProject[]>([])
+  const [openError, setOpenError] = useState<string | null>(null)
 
   const platform = window.agentFarm?.platform ?? 'browser'
+
+  const detectClaude = useCallback(async () => {
+    setClaudeStatus('loading')
+    const api = window.agentFarm
+    if (!api) {
+      setClaudeStatus({ state: 'error', message: 'IPC bridge unavailable' })
+      return
+    }
+    try {
+      const status = await api.claude.detect()
+      setClaudeStatus(status)
+    } catch (err) {
+      setClaudeStatus({
+        state: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }, [])
+
+  const refreshRecents = useCallback(async () => {
+    const api = window.agentFarm
+    if (!api) return
+    try {
+      setRecents(await api.project.recent.list())
+    } catch {
+      /* ignored — recents are best-effort */
+    }
+  }, [])
+
+  useEffect(() => {
+    void detectClaude()
+    void refreshRecents()
+  }, [detectClaude, refreshRecents])
+
+  const claudeVersion =
+    claudeStatus !== 'loading' && 'version' in claudeStatus ? claudeStatus.version : null
 
   const enterSession = (meta: SessionMeta, agents: Agent[] = []) => {
     setView({
@@ -115,37 +115,117 @@ export function App() {
     })
   }
 
-  const handleOpenLocal = () => {
-    // TODO: real folder picker via main process IPC.
-    // Until then, route to the create flow which at least lets user
-    // type a parent folder.
-    alert('Open project (file picker) lands once main-process IPC ships. Use Create or Quick start for now.')
+  const handleOpenLocal = async (path?: string) => {
+    setOpenError(null)
+    const api = window.agentFarm
+    if (!api) {
+      setOpenError('IPC bridge unavailable.')
+      return
+    }
+    const result = await api.project.open(path)
+    if (!result.ok) {
+      if (result.reason === 'cancelled') return
+      const msg =
+        result.reason === 'not_a_git_repo'
+          ? `Not a git repo: ${result.path}. Run "git init" in that folder first.`
+          : `Couldn't open ${result.path}: ${result.message}`
+      setOpenError(msg)
+      void api.log({ level: 'warn', message: 'open project failed', data: { result } })
+      void refreshRecents()
+      return
+    }
+    enterSession(
+      {
+        baseSha: result.project.baseSha || '0000000',
+        repoName: result.project.repoName,
+        claudeVersion,
+        model: model === 'default' ? null : model,
+      },
+      [],
+    )
+    void refreshRecents()
+  }
+
+  const handleForgetRecent = async (path: string) => {
+    const api = window.agentFarm
+    if (!api) return
+    setRecents(await api.project.recent.forget(path))
   }
 
   const handleOpenGitHub = () => {
-    alert('Open GitHub project (clone) lands once main-process IPC ships.')
+    setOpenError('GitHub clone lands in the next release. Open a local folder for now.')
   }
 
   const handleQuickStart = () => {
-    enterSession(SAMPLE_META, SAMPLE_AGENTS)
+    enterSession({ ...DEMO_META, claudeVersion: claudeVersion ?? 'demo' }, SAMPLE_AGENTS)
   }
 
   const handleCreate = (input: CreateProjectInput) => {
     setCreateOpen(false)
-    // Stub: pretend the project was created. In the IPC version this
-    // call kicks off `git init`, then enters the session.
-    enterSession(
-      {
-        baseSha: '0000000000000000000000000000000000000000',
-        repoName: input.name,
-        claudeVersion: '2.1.132',
-        model: model === 'default' ? null : model,
-      },
-      []
+    setOpenError('Project creation lands in the next release. Open a local folder for now.')
+    void window.agentFarm?.log({
+      level: 'info',
+      message: 'create project requested (stub)',
+      data: { input },
+    })
+  }
+
+  const handleOpenInstallDocs = () => {
+    void window.agentFarm?.openExternal('https://docs.claude.com/en/docs/claude-code/setup')
+  }
+
+  const handleOpenSignIn = () => {
+    void window.agentFarm?.openExternal('https://claude.ai/login')
+  }
+
+  // ── Onboarding gate ─────────────────────────────────────────────────
+  const needsOnboarding =
+    claudeStatus === 'loading' ||
+    (claudeStatus.state !== 'ok' && !bypassOnboarding)
+
+  if (needsOnboarding && view.kind === 'welcome') {
+    return (
+      <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
+        <header
+          className="drag flex items-center justify-end
+                     bg-bone dark:bg-coal
+                     border-b border-line dark:border-line-dark px-4"
+          style={{ height: 'var(--titlebar-h)', paddingLeft: 90 }}
+        >
+          <span className="font-mono text-[10px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
+            agent farm  ·  v{__APP_VERSION__}
+          </span>
+        </header>
+
+        <main className="flex-1 overflow-hidden">
+          <Onboarding
+            status={claudeStatus}
+            onRetry={detectClaude}
+            onOpenInstallDocs={handleOpenInstallDocs}
+            onOpenSignIn={handleOpenSignIn}
+            onContinueAnyway={() => setBypassOnboarding(true)}
+          />
+        </main>
+
+        <StatusStrip
+          platform={platform}
+          message={
+            claudeStatus === 'loading'
+              ? 'detecting claude'
+              : claudeStatus.state === 'missing'
+                ? 'claude not found'
+                : claudeStatus.state === 'unauthed'
+                  ? 'claude not signed in'
+                  : claudeStatus.state === 'error'
+                    ? 'claude check failed'
+                    : 'claude ready'
+          }
+        />
+      </div>
     )
   }
 
-  // ── Welcome screen ───────────────────────────────────────────────
+  // ── Welcome ─────────────────────────────────────────────────────────
   if (view.kind === 'welcome') {
     return (
       <>
@@ -163,14 +243,26 @@ export function App() {
 
           <main className="flex-1 overflow-hidden">
             <WelcomeScreen
-              onOpenLocal={handleOpenLocal}
+              onOpenLocal={() => void handleOpenLocal()}
               onOpenGitHub={handleOpenGitHub}
               onCreateProject={() => setCreateOpen(true)}
               onDemo={handleQuickStart}
+              recents={recents}
+              onOpenRecent={(p) => void handleOpenLocal(p)}
+              onForgetRecent={(p) => void handleForgetRecent(p)}
             />
           </main>
 
-          <StatusStrip platform={platform} message="welcome" />
+          <StatusStrip
+            platform={platform}
+            message={
+              openError
+                ? openError
+                : claudeStatus !== 'loading' && claudeStatus.state === 'ok'
+                  ? `claude ${claudeStatus.version}`
+                  : 'welcome'
+            }
+          />
         </div>
 
         <CreateProjectModal
@@ -182,7 +274,6 @@ export function App() {
     )
   }
 
-  // ── Active session ──────────────────────────────────────────────
   return (
     <SessionView
       view={view}
@@ -221,14 +312,14 @@ function SessionView({
           acc[a.state] += 1
           return acc
         },
-        { running: 0, done: 0, noop: 0, failed: 0, queued: 0 }
+        { running: 0, done: 0, noop: 0, failed: 0, queued: 0 },
       ),
-    [agents]
+    [agents],
   )
 
   const selectedAgent = useMemo(
     () => agents.find((a) => a.id === selectedId) ?? null,
-    [agents, selectedId]
+    [agents, selectedId],
   )
 
   const handleSubmit = (prompt: string) => {
@@ -251,7 +342,7 @@ function SessionView({
         `$ claude -p --dangerously-skip-permissions${
           model !== 'default' ? ` --model ${model}` : ''
         } "${prompt}"`,
-        '(stub: main-process spawn arrives once IPC lands)',
+        '(stub: main-process spawn arrives in the next release)',
       ],
       usage: null,
     }
@@ -266,7 +357,6 @@ function SessionView({
     setView({ ...view, selectedId: id })
   }
 
-  // Reflect chosen model into the meta surfacing as the title bar field.
   const metaWithModel = { ...meta, model: model === 'default' ? null : model }
 
   return (
@@ -280,11 +370,7 @@ function SessionView({
 
       <div className="flex-1 grid grid-cols-[17rem_1fr] min-h-0">
         <aside className="border-r border-line dark:border-line-dark overflow-y-auto bg-bone dark:bg-coal">
-          <AgentList
-            agents={agents}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-          />
+          <AgentList agents={agents} selectedId={selectedId} onSelect={handleSelect} />
         </aside>
 
         <main className="overflow-hidden bg-bone dark:bg-coal">
@@ -295,11 +381,7 @@ function SessionView({
       <PromptBar onSubmit={handleSubmit} />
       <StatusStrip
         platform={platform}
-        message={
-          selectedAgent
-            ? `selected ${selectedAgent.id}`
-            : `ready · ${meta.repoName}`
-        }
+        message={selectedAgent ? `selected ${selectedAgent.id}` : `ready · ${meta.repoName}`}
       />
     </div>
   )

@@ -1,6 +1,16 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import {
+  ALLOWED_EXTERNAL_HOSTS,
+  IPC,
+  type LogPayload,
+} from '../shared/ipc'
+import { logger } from './logger'
+import { forgetProject, listRecentProjects } from './settings'
+import { inspectPath, openProjectDialog } from './project'
+import { detectClaude } from './claude'
+import { runSmoke } from './smoke'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -33,11 +43,10 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (isAllowedExternal(url)) shell.openExternal(url)
     return { action: 'deny' }
   })
 
-  // electron-vite injects ELECTRON_RENDERER_URL during dev
   if (process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -45,7 +54,60 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+function isAllowedExternal(url: string): boolean {
+  try {
+    const u = new URL(url)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false
+    return (ALLOWED_EXTERNAL_HOSTS as readonly string[]).some(
+      (host) => u.hostname === host || u.hostname.endsWith('.' + host),
+    )
+  } catch {
+    return false
+  }
+}
+
+function registerIpc(): void {
+  ipcMain.handle(IPC.ProjectOpen, async (_e, path?: unknown) => {
+    if (typeof path === 'string' && path.length > 0) {
+      return inspectPath(path)
+    }
+    const win = BrowserWindow.getFocusedWindow() ?? mainWindow
+    return openProjectDialog(win)
+  })
+
+  ipcMain.handle(IPC.ProjectRecentList, async () => listRecentProjects())
+
+  ipcMain.handle(IPC.ProjectRecentForget, async (_e, path: string) => {
+    if (typeof path !== 'string') return listRecentProjects()
+    return forgetProject(path)
+  })
+
+  ipcMain.handle(IPC.ClaudeDetect, async () => detectClaude())
+
+  ipcMain.handle(IPC.OpenExternal, async (_e, url: string) => {
+    if (typeof url !== 'string' || !isAllowedExternal(url)) {
+      await logger.warn('shell.openExternal blocked', { url })
+      return { ok: false, reason: 'blocked' as const }
+    }
+    await shell.openExternal(url)
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC.Log, async (_e, payload: LogPayload) => {
+    if (!payload || typeof payload.message !== 'string') return
+    await logger.fromRenderer(payload)
+  })
+}
+
+app.whenReady().then(async () => {
+  if (process.env.AGENTFARM_SMOKE === '1') {
+    const code = await runSmoke({ detectClaude, inspectPath })
+    app.exit(code)
+    return
+  }
+
+  registerIpc()
+  await logger.info('app ready', { version: app.getVersion(), platform: process.platform })
   createWindow()
 
   app.on('activate', () => {
@@ -55,4 +117,11 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+process.on('uncaughtException', (err) => {
+  void logger.error('uncaughtException', { message: err.message, stack: err.stack })
+})
+process.on('unhandledRejection', (reason) => {
+  void logger.error('unhandledRejection', { reason: String(reason) })
 })

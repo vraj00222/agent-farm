@@ -12,7 +12,8 @@
     "preview": "electron-vite preview",
     "package": "npm run build:fast && electron-builder --mac --config electron-builder.yml",
     "package:dir": "npm run build:fast && electron-builder --mac dir --config electron-builder.yml",
-    "typecheck": "tsc --noEmit -p src/main/tsconfig.json && tsc --noEmit -p src/preload/tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json"
+    "typecheck": "tsc --noEmit -p src/main/tsconfig.json && tsc --noEmit -p src/preload/tsconfig.json && tsc --noEmit -p src/renderer/tsconfig.json",
+    "smoke": "npm run build:fast && AGENTFARM_SMOKE=1 electron out/main/index.js"
   },
   "devDependencies": {
     "@types/node": "^20.16.0",

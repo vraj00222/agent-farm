@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
+import type { RecentProject } from '../../../shared/ipc'
 
 interface WelcomeScreenProps {
   onOpenLocal: () => void
   onOpenGitHub: () => void
   onCreateProject: () => void
   onDemo?: () => void
+  recents?: RecentProject[]
+  onOpenRecent?: (path: string) => void
+  onForgetRecent?: (path: string) => void
 }
 
 const NAME = 'AGENT/FARM'
@@ -22,6 +26,9 @@ export function WelcomeScreen({
   onOpenGitHub,
   onCreateProject,
   onDemo,
+  recents,
+  onOpenRecent,
+  onForgetRecent,
 }: WelcomeScreenProps) {
   return (
     <div className="h-full w-full flex flex-col items-center justify-center px-12 py-16 bg-bone dark:bg-coal">
@@ -32,6 +39,13 @@ export function WelcomeScreen({
           onOpenGitHub={onOpenGitHub}
           onCreateProject={onCreateProject}
         />
+        {recents && recents.length > 0 && onOpenRecent && (
+          <Recents
+            recents={recents}
+            onOpen={onOpenRecent}
+            onForget={onForgetRecent}
+          />
+        )}
         {onDemo && (
           <button
             type="button"
@@ -183,6 +197,67 @@ function Card({
         </p>
       </div>
     </button>
+  )
+}
+
+function Recents({
+  recents,
+  onOpen,
+  onForget,
+}: {
+  recents: RecentProject[]
+  onOpen: (path: string) => void
+  onForget?: (path: string) => void
+}) {
+  return (
+    <div
+      className="w-full max-w-[760px] animate-rise"
+      style={{ animationDelay: '650ms' }}
+    >
+      <p
+        className="font-mono text-[10px] uppercase tracking-cap
+                   text-ink-400 dark:text-chalk-subtle mb-2 px-1"
+      >
+        recent projects
+      </p>
+      <ul className="flex flex-col">
+        {recents.map((r) => (
+          <li
+            key={r.path}
+            className="group flex items-baseline justify-between gap-3
+                       border-b border-line dark:border-line-dark last:border-b-0
+                       py-2 px-1"
+          >
+            <button
+              type="button"
+              onClick={() => onOpen(r.path)}
+              className="flex-1 min-w-0 text-left no-drag flex items-baseline gap-3
+                         hover:text-ink-900 dark:hover:text-chalk transition-colors"
+            >
+              <span className="font-display font-medium text-[13px] text-ink-800 dark:text-chalk truncate">
+                {r.repoName}
+              </span>
+              <span className="font-mono text-[10.5px] text-ink-400 dark:text-chalk-subtle truncate">
+                {r.path}
+              </span>
+            </button>
+            {onForget && (
+              <button
+                type="button"
+                onClick={() => onForget(r.path)}
+                aria-label={`Forget ${r.repoName}`}
+                className="no-drag opacity-0 group-hover:opacity-100
+                           font-mono text-[10px] uppercase tracking-cap
+                           text-ink-400 dark:text-chalk-subtle
+                           hover:text-state-failed transition-colors"
+              >
+                forget
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
