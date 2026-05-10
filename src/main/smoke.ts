@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import * as nodePty from 'node-pty'
 import type { ClaudeStatus, ProjectOpenResult } from '../shared/ipc'
 
 const exec = promisify(execFile)
@@ -92,6 +93,33 @@ export async function runSmoke({ detectClaude, inspectPath }: SmokeDeps): Promis
         settings.recentProjects.some((r: { path: string }) => r.path === repoDir),
       `count=${settings.recentProjects?.length ?? 0}`,
     )
+  }
+
+  // 6. node-pty native module loads + can spawn a trivial command
+  try {
+    const pty = nodePty.spawn('/bin/echo', ['hello-pty'], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      cwd: '/',
+      env: process.env as Record<string, string>,
+    })
+    let buf = ''
+    pty.onData((d) => {
+      buf += d
+    })
+    const exitCode = await new Promise<number>((resolve) => {
+      pty.onExit(({ exitCode }) => resolve(exitCode ?? -1))
+      // Hard timeout in case node-pty hangs.
+      setTimeout(() => resolve(-2), 5000)
+    })
+    check(
+      'node-pty spawns + emits data + exits',
+      buf.includes('hello-pty') && exitCode === 0,
+      `exit=${exitCode} bufLen=${buf.length}`,
+    )
+  } catch (err) {
+    check('node-pty native module loads', false, (err as Error).message)
   }
 
   // Cleanup

@@ -5,12 +5,20 @@ import {
   ALLOWED_EXTERNAL_HOSTS,
   IPC,
   type LogPayload,
+  type PtyCreateOptions,
 } from '../shared/ipc'
 import { logger } from './logger'
 import { forgetProject, listRecentProjects } from './settings'
 import { inspectPath, openProjectDialog } from './project'
 import { detectClaude } from './claude'
 import { runSmoke } from './smoke'
+import {
+  createPty,
+  killPty,
+  killSessionsForWebContents,
+  resizePty,
+  writePty,
+} from './pty'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -40,6 +48,13 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+  })
+
+  mainWindow.on('closed', () => {
+    if (mainWindow) {
+      killSessionsForWebContents(mainWindow.webContents.id)
+    }
+    mainWindow = null
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -96,6 +111,22 @@ function registerIpc(): void {
   ipcMain.handle(IPC.Log, async (_e, payload: LogPayload) => {
     if (!payload || typeof payload.message !== 'string') return
     await logger.fromRenderer(payload)
+  })
+
+  ipcMain.handle(IPC.PtyCreate, async (e, opts: PtyCreateOptions) => {
+    return createPty(opts, e.sender.id)
+  })
+
+  ipcMain.handle(IPC.PtyWrite, async (_e, sessionId: string, data: string) => {
+    writePty(sessionId, data)
+  })
+
+  ipcMain.handle(IPC.PtyResize, async (_e, sessionId: string, cols: number, rows: number) => {
+    resizePty(sessionId, cols, rows)
+  })
+
+  ipcMain.handle(IPC.PtyKill, async (_e, sessionId: string) => {
+    killPty(sessionId)
   })
 }
 
