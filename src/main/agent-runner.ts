@@ -25,6 +25,14 @@ function slugify(prompt: string): string {
   return slug || 'task'
 }
 
+/** Friendly display name. First sentence-ish chunk of the prompt, trimmed. */
+function taskName(prompt: string): string {
+  const cleaned = prompt.replace(/\s+/g, ' ').trim()
+  if (cleaned.length <= 60) return cleaned
+  const cutAt = cleaned.lastIndexOf(' ', 57)
+  return (cutAt > 30 ? cleaned.slice(0, cutAt) : cleaned.slice(0, 57)) + '…'
+}
+
 interface AgentRecord {
   id: string
   projectPath: string
@@ -144,6 +152,8 @@ export async function spawnAgent(
     branch: wt.branch,
     worktreePath: wt.worktreePath,
     prompt,
+    name: taskName(prompt),
+    slug,
     startedAt,
     pid: child.pid ?? null,
     baseSha: wt.baseSha,

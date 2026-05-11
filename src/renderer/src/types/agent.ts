@@ -2,6 +2,10 @@ export type AgentState = 'queued' | 'running' | 'done' | 'noop' | 'failed'
 
 export interface Agent {
   id: string
+  /** Display name derived from the prompt — first ~50 chars, no trailing punctuation. */
+  name: string
+  /** Short slug used for the branch + worktree path. */
+  slug: string
   branch: string
   worktreePath: string
   prompt: string
