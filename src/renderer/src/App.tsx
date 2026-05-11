@@ -9,6 +9,7 @@ import { Onboarding } from './components/Onboarding'
 import { ClaudeLoginPanel } from './components/ClaudeLoginPanel'
 import { CreateProjectModal, type CreateProjectInput } from './components/CreateProjectModal'
 import { TabStrip } from './components/TabStrip'
+import { RightPanel } from './components/RightPanel'
 import type { Agent, SessionMeta } from './types/agent'
 import type { ProjectTab } from './types/project'
 import type { AgentFarmApi, ClaudeStatus, RecentProject } from '../../shared/ipc'
@@ -62,6 +63,8 @@ export function App() {
   const [recents, setRecents] = useState<RecentProject[]>([])
   const [openError, setOpenError] = useState<string | null>(null)
   const [loginFlow, setLoginFlow] = useState<{ binaryPath: string } | null>(null)
+  /** Per-project right-panel visibility — keyed by tab id. */
+  const [rightPanelByTab, setRightPanelByTab] = useState<Record<string, boolean>>({})
 
   const platform = window.agentFarm?.platform ?? 'browser'
 
@@ -100,6 +103,10 @@ export function App() {
 
   const claudeVersion =
     claudeStatus !== 'loading' && 'version' in claudeStatus ? claudeStatus.version : null
+  const claudeBinary =
+    claudeStatus !== 'loading' && 'binaryPath' in claudeStatus
+      ? claudeStatus.binaryPath
+      : null
 
   // ── Project open / close / focus ──────────────────────────────────────
 
@@ -237,11 +244,20 @@ export function App() {
 
   const activeTab = projects.find((t) => t.id === activeId) ?? null
   const claudeIsOk = claudeStatus !== 'loading' && claudeStatus.state === 'ok'
+  const rightPanelOpen = activeTab ? rightPanelByTab[activeTab.id] ?? true : false
+  const toggleRightPanel = () => {
+    if (!activeTab) return
+    setRightPanelByTab((m) => ({ ...m, [activeTab.id]: !(m[activeTab.id] ?? true) }))
+  }
 
   if (needsOnboarding) {
     return (
       <div className="relative h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
-        <AppTitleBar onSignInAgain={null} />
+        <AppTitleBar
+          onSignInAgain={null}
+          rightPanelOpen={null}
+          onTogglePanel={null}
+        />
         <main className="flex-1 overflow-hidden">
           <Onboarding
             status={claudeStatus}
@@ -280,7 +296,11 @@ export function App() {
   return (
     <>
       <div className="relative h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
-        <AppTitleBar onSignInAgain={claudeIsOk ? handleOpenSignIn : null} />
+        <AppTitleBar
+          onSignInAgain={claudeIsOk ? handleOpenSignIn : null}
+          rightPanelOpen={activeTab ? rightPanelOpen : null}
+          onTogglePanel={activeTab ? toggleRightPanel : null}
+        />
 
         {projects.length > 0 && (
           <TabStrip
@@ -299,6 +319,8 @@ export function App() {
               tab={activeTab}
               onUpdate={(u) => updateTab(activeTab.id, u)}
               claudeVersion={claudeVersion}
+              claudeBinary={claudeBinary}
+              rightPanelOpen={rightPanelOpen}
             />
           ) : (
             <WelcomeScreen
@@ -345,8 +367,16 @@ export function App() {
   )
 }
 
-/** macOS-style title bar with the brand + a real "Sign in again" button. */
-function AppTitleBar({ onSignInAgain }: { onSignInAgain: (() => void) | null }) {
+/** macOS-style title bar with the brand + sign-in + right-panel toggle. */
+function AppTitleBar({
+  onSignInAgain,
+  rightPanelOpen,
+  onTogglePanel,
+}: {
+  onSignInAgain: (() => void) | null
+  rightPanelOpen: boolean | null
+  onTogglePanel: (() => void) | null
+}) {
   return (
     <header
       className="drag flex items-center justify-between
@@ -362,24 +392,65 @@ function AppTitleBar({ onSignInAgain }: { onSignInAgain: (() => void) | null }) 
           v{__APP_VERSION__}
         </span>
       </div>
-      {onSignInAgain && (
-        <button
-          type="button"
-          onClick={onSignInAgain}
-          onMouseDown={(e) => e.preventDefault()}
-          className="no-drag inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md
-                     border border-line dark:border-line-dark
-                     hover:border-ink-500 dark:hover:border-chalk-dim
-                     hover:bg-bone-raised dark:hover:bg-coal-raised
-                     text-ink-700 dark:text-chalk-dim
-                     hover:text-ink-900 dark:hover:text-chalk
-                     font-display font-semibold text-[11px]
-                     transition-all duration-150"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
-          Sign in again
-        </button>
-      )}
+      <div className="flex items-center gap-2">
+        {onSignInAgain && (
+          <button
+            type="button"
+            onClick={onSignInAgain}
+            onMouseDown={(e) => e.preventDefault()}
+            className="no-drag inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md
+                       border border-line dark:border-line-dark
+                       hover:border-ink-500 dark:hover:border-chalk-dim
+                       hover:bg-bone-raised dark:hover:bg-coal-raised
+                       text-ink-700 dark:text-chalk-dim
+                       hover:text-ink-900 dark:hover:text-chalk
+                       font-display font-semibold text-[11px]
+                       transition-all duration-150"
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          >
+            Sign in again
+          </button>
+        )}
+        {onTogglePanel && (
+          <button
+            type="button"
+            onClick={onTogglePanel}
+            onMouseDown={(e) => e.preventDefault()}
+            title={rightPanelOpen ? 'Hide right panel' : 'Show right panel'}
+            aria-pressed={rightPanelOpen ?? false}
+            className="no-drag inline-flex items-center justify-center w-7 h-6 rounded-md
+                       border border-line dark:border-line-dark
+                       hover:border-ink-500 dark:hover:border-chalk-dim
+                       hover:bg-bone-raised dark:hover:bg-coal-raised
+                       text-ink-700 dark:text-chalk-dim
+                       hover:text-ink-900 dark:hover:text-chalk
+                       transition-all duration-150"
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+              <rect
+                x="1.5"
+                y="2.5"
+                width="11"
+                height="9"
+                rx="1.5"
+                stroke="currentColor"
+                strokeWidth="1.25"
+                fill="none"
+              />
+              <rect
+                x="8.5"
+                y="2.5"
+                width="4"
+                height="9"
+                fill={rightPanelOpen ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                strokeWidth="1.25"
+              />
+            </svg>
+          </button>
+        )}
+      </div>
     </header>
   )
 }
@@ -388,10 +459,14 @@ function SessionView({
   tab,
   onUpdate,
   claudeVersion,
+  claudeBinary,
+  rightPanelOpen,
 }: {
   tab: ProjectTab
   onUpdate: (updater: (t: ProjectTab) => ProjectTab) => void
   claudeVersion: string | null
+  claudeBinary: string | null
+  rightPanelOpen: boolean
 }) {
   const totals = useMemo(
     () =>
@@ -472,7 +547,14 @@ function SessionView({
 
       <ProjectPathBar path={tab.path} isGitRepo={tab.isGitRepo} />
 
-      <div className="flex-1 grid grid-cols-[17rem_1fr] min-h-0">
+      <div
+        className="flex-1 grid min-h-0"
+        style={{
+          gridTemplateColumns: rightPanelOpen
+            ? '17rem minmax(0, 1fr) minmax(28rem, 32rem)'
+            : '17rem minmax(0, 1fr)',
+        }}
+      >
         <aside className="border-r border-line dark:border-line-dark overflow-y-auto bg-bone dark:bg-coal">
           <AgentList
             agents={tab.agents}
@@ -481,9 +563,18 @@ function SessionView({
           />
         </aside>
 
-        <main className="overflow-hidden bg-bone dark:bg-coal">
+        <main className="overflow-hidden bg-bone dark:bg-coal min-w-0">
           <MainPanel agent={selectedAgent} />
         </main>
+
+        {rightPanelOpen && (
+          <RightPanel
+            projectId={tab.id}
+            projectPath={tab.path}
+            isGitRepo={tab.isGitRepo}
+            claudeBinary={claudeBinary}
+          />
+        )}
       </div>
 
       <PromptBar onSubmit={handleSubmit} />

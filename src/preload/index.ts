@@ -4,6 +4,9 @@ import {
   IPC,
   type AgentFarmApi,
   type ClaudeStatus,
+  type FsListOptions,
+  type FsListResult,
+  type GitDiffResult,
   type LogPayload,
   type ProjectOpenResult,
   type PtyCreateOptions,
@@ -35,6 +38,15 @@ const api: AgentFarmApi = {
 
   claude: {
     detect: (): Promise<ClaudeStatus> => ipcRenderer.invoke(IPC.ClaudeDetect),
+  },
+
+  fs: {
+    list: (path: string, opts?: FsListOptions): Promise<FsListResult> =>
+      ipcRenderer.invoke(IPC.FsList, path, opts),
+  },
+
+  git: {
+    diff: (path: string): Promise<GitDiffResult> => ipcRenderer.invoke(IPC.GitDiff, path),
   },
 
   pty: {

@@ -98,7 +98,32 @@ export async function runSmoke({ detectClaude, inspectPath }: SmokeDeps): Promis
     )
   }
 
-  // 6. node-pty native module loads + can spawn a trivial command
+  // 6. fs.list returns a tree of the repo we created above
+  {
+    const { listProjectTree } = await import('./fs-list')
+    const fsResult = await listProjectTree(repoDir, { maxDepth: 2, maxEntries: 50 })
+    check(
+      'fs.list returns a tree',
+      fsResult.ok === true &&
+        fsResult.root.kind === 'dir' &&
+        Array.isArray(fsResult.root.children) &&
+        fsResult.root.children!.some((e) => e.name === 'README.md'),
+      fsResult.ok ? `entries=${fsResult.totalEntries}` : fsResult.reason,
+    )
+  }
+
+  // 7. git.diff returns empty diff (no commits yet, no working changes)
+  {
+    const { getGitDiff } = await import('./git-diff')
+    const diffResult = await getGitDiff(repoDir)
+    check(
+      'git.diff runs against a fresh repo',
+      diffResult.ok === true && typeof diffResult.diff === 'string',
+      diffResult.ok ? `len=${diffResult.diff.length}` : diffResult.reason,
+    )
+  }
+
+  // 8. node-pty native module loads + can spawn a trivial command
   try {
     const pty = nodePty.spawn('/bin/echo', ['hello-pty'], {
       name: 'xterm-256color',
