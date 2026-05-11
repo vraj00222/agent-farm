@@ -93,6 +93,65 @@ export type GitDiffResult =
   | { ok: true; diff: string; filesChanged: number }
   | { ok: false; reason: string }
 
+// ── Agent runner (per-task spawn) ────────────────────────────────────
+
+export interface AgentSpawnOptions {
+  projectPath: string
+  prompt: string
+  /** Model alias or full name. 'default' = pass nothing. */
+  model: string
+  /** Absolute path to the claude CLI, from claude.detect. */
+  claudeBinary: string
+}
+
+export type AgentSpawnResult =
+  | {
+      ok: true
+      agentId: string
+      branch: string
+      worktreePath: string
+      baseSha: string
+    }
+  | { ok: false; reason: string }
+
+export type AgentEvent =
+  | {
+      kind: 'spawn'
+      agentId: string
+      projectPath: string
+      branch: string
+      worktreePath: string
+      prompt: string
+      startedAt: number
+      pid: number | null
+      baseSha: string
+    }
+  | { kind: 'state'; agentId: string; state: 'running' }
+  | {
+      kind: 'state'
+      agentId: string
+      state: 'done' | 'failed' | 'cancelled'
+      exitCode: number | null
+      endedAt: number
+      elapsedMs: number
+      filesChanged: string[]
+      commits: string[]
+    }
+  | { kind: 'output'; agentId: string; text: string }
+
+// ── Project clone ────────────────────────────────────────────────────
+
+export interface ProjectCloneOptions {
+  /** GitHub URL or any git remote URL. */
+  url: string
+  /** Parent directory. The cloned repo will be placed at parentPath/repoName. */
+  parentPath: string
+}
+
+export type ProjectCloneResult =
+  | { ok: true; project: ProjectInfo }
+  | { ok: false; reason: string }
+
 // ── Embedded PTY ─────────────────────────────────────────────────────
 
 export interface PtyCreateOptions {
@@ -140,6 +199,7 @@ export interface LogPayload {
 
 export const IPC = {
   ProjectOpen: 'project:open',
+  ProjectClone: 'project:clone',
   ProjectRecentList: 'project:recent:list',
   ProjectRecentForget: 'project:recent:forget',
   ClaudeDetect: 'claude:detect',
@@ -147,6 +207,9 @@ export const IPC = {
   RevealInFinder: 'shell:reveal',
   FsList: 'fs:list',
   GitDiff: 'git:diff',
+  AgentSpawn: 'agent:spawn',
+  AgentKill: 'agent:kill',
+  AgentEvent: 'agent:event',
   Log: 'log:write',
   PtyCreate: 'pty:create',
   PtyWrite: 'pty:write',
@@ -183,10 +246,17 @@ export interface AgentFarmApi {
   project: {
     /** With no arg, shows native folder picker. With a path, skips the dialog. */
     open(path?: string): Promise<ProjectOpenResult>
+    clone(opts: ProjectCloneOptions): Promise<ProjectCloneResult>
     recent: {
       list(): Promise<RecentProject[]>
       forget(path: string): Promise<RecentProject[]>
     }
+  }
+
+  agent: {
+    spawn(opts: AgentSpawnOptions): Promise<AgentSpawnResult>
+    kill(agentId: string): Promise<{ ok: boolean; reason?: string }>
+    onEvent(cb: (e: AgentEvent) => void): () => void
   }
 
   claude: {

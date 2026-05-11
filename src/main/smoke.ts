@@ -123,7 +123,22 @@ export async function runSmoke({ detectClaude, inspectPath }: SmokeDeps): Promis
     )
   }
 
-  // 8. node-pty native module loads + can spawn a trivial command
+  // 8. worktree create/remove round-trips on a fresh repo. We need at
+  //    least one commit on the repo for `git worktree add -b` to work.
+  {
+    await exec('git', ['-c', 'user.email=smoke@agent.farm', '-c', 'user.name=smoke', 'commit', '--allow-empty', '-m', 'smoke'], {
+      cwd: repoDir,
+    })
+    const { createWorktree, removeWorktree } = await import('./worktree')
+    const wt = await createWorktree(repoDir, 'smoke-task')
+    check('worktree.create on a real repo', wt.ok === true, wt.ok ? wt.worktreePath : wt.reason)
+    if (wt.ok) {
+      const rm = await removeWorktree(repoDir, wt.worktreePath, wt.branch)
+      check('worktree.remove cleans up', rm.ok === true, rm.reason ?? '')
+    }
+  }
+
+  // 9. node-pty native module loads + can spawn a trivial command
   try {
     const pty = nodePty.spawn('/bin/echo', ['hello-pty'], {
       name: 'xterm-256color',

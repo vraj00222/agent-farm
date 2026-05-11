@@ -1,9 +1,14 @@
 import { dialog, type BrowserWindow } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { basename } from 'node:path'
+import { basename, join } from 'node:path'
 import { promises as fs } from 'node:fs'
-import type { ProjectInfo, ProjectOpenResult } from '../shared/ipc'
+import type {
+  ProjectCloneOptions,
+  ProjectCloneResult,
+  ProjectInfo,
+  ProjectOpenResult,
+} from '../shared/ipc'
 import { logger } from './logger'
 import { rememberProject } from './settings'
 
@@ -112,4 +117,57 @@ export async function inspectPath(path: string): Promise<ProjectOpenResult> {
     hasIndexHtml: indexHtml,
   })
   return { ok: true, project: info }
+}
+
+/** Extract the repo name from a git URL.
+ *  Examples:
+ *    git@github.com:vraj00222/agent-farm.git   → agent-farm
+ *    https://github.com/x/y.git                → y
+ *    https://github.com/x/y                    → y
+ */
+function repoNameFromUrl(url: string): string {
+  const last = url.replace(/\.git\/?$/, '').split('/').pop() ?? ''
+  return last || 'project'
+}
+
+export async function cloneProject(opts: ProjectCloneOptions): Promise<ProjectCloneResult> {
+  if (!opts.url || !opts.parentPath) {
+    return { ok: false, reason: 'url and parentPath are required' }
+  }
+  // Defensive: require a plausible git URL. We don't want shell-injection
+  // via an arbitrary string being passed as `git clone <whatever>`. execFile
+  // already avoids shell, but a malicious URL of the form `--upload-pack=...`
+  // could still be dangerous, so we sanity-check the prefix.
+  const url = opts.url.trim()
+  const looksOk =
+    url.startsWith('https://') ||
+    url.startsWith('http://') ||
+    url.startsWith('git@') ||
+    url.startsWith('ssh://')
+  if (!looksOk) {
+    return { ok: false, reason: 'unsupported URL scheme — use https://, ssh:// or git@host' }
+  }
+
+  const name = repoNameFromUrl(url)
+  const target = join(opts.parentPath, name)
+
+  try {
+    await fs.mkdir(opts.parentPath, { recursive: true })
+    const stat = await fs.stat(target).catch(() => null)
+    if (stat) {
+      return { ok: false, reason: `target already exists: ${target}` }
+    }
+
+    await logger.info('clone start', { url, target })
+    await exec('git', ['clone', '--', url, target], {
+      cwd: opts.parentPath,
+      timeout: 120_000,
+    })
+
+    return inspectPath(target) as Promise<ProjectCloneResult>
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    await logger.error('clone failed', { url, target, reason })
+    return { ok: false, reason }
+  }
 }
