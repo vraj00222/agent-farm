@@ -62,6 +62,37 @@ export const ALLOWED_EXTERNAL_HOSTS = [
   'github.com',
 ] as const
 
+// ── Filesystem listing ───────────────────────────────────────────────
+
+export interface FsEntry {
+  /** Just the basename (e.g. "src", "package.json"). */
+  name: string
+  /** Absolute path. */
+  path: string
+  kind: 'dir' | 'file'
+  /** Populated for directories that were recursed into. Empty for files. */
+  children?: FsEntry[]
+  /** True if recursion stopped here because we hit the depth cap. */
+  truncated?: boolean
+}
+
+export interface FsListOptions {
+  /** Hard cap on recursion depth from the root. Default 3. */
+  maxDepth?: number
+  /** Hard cap on total entries returned. Default 600. */
+  maxEntries?: number
+}
+
+export type FsListResult =
+  | { ok: true; root: FsEntry; totalEntries: number; capped: boolean }
+  | { ok: false; reason: string }
+
+// ── Git diff ─────────────────────────────────────────────────────────
+
+export type GitDiffResult =
+  | { ok: true; diff: string; filesChanged: number }
+  | { ok: false; reason: string }
+
 // ── Embedded PTY ─────────────────────────────────────────────────────
 
 export interface PtyCreateOptions {
@@ -114,6 +145,8 @@ export const IPC = {
   ClaudeDetect: 'claude:detect',
   OpenExternal: 'shell:open-external',
   RevealInFinder: 'shell:reveal',
+  FsList: 'fs:list',
+  GitDiff: 'git:diff',
   Log: 'log:write',
   PtyCreate: 'pty:create',
   PtyWrite: 'pty:write',
@@ -158,6 +191,14 @@ export interface AgentFarmApi {
 
   claude: {
     detect(): Promise<ClaudeStatus>
+  }
+
+  fs: {
+    list(path: string, opts?: FsListOptions): Promise<FsListResult>
+  }
+
+  git: {
+    diff(path: string): Promise<GitDiffResult>
   }
 
   pty: {

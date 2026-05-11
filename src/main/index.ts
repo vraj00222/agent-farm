@@ -11,6 +11,8 @@ import { logger } from './logger'
 import { forgetProject, listRecentProjects } from './settings'
 import { inspectPath, openProjectDialog } from './project'
 import { detectClaude } from './claude'
+import { listProjectTree } from './fs-list'
+import { getGitDiff } from './git-diff'
 import { runSmoke } from './smoke'
 import {
   createPty,
@@ -108,6 +110,20 @@ function registerIpc(): void {
     }
     await shell.openExternal(url)
     return { ok: true }
+  })
+
+  ipcMain.handle(IPC.FsList, async (_e, path: string, opts?: unknown) => {
+    if (typeof path !== 'string' || path.length === 0) {
+      return { ok: false, reason: 'path required' }
+    }
+    return listProjectTree(path, (opts ?? {}) as Parameters<typeof listProjectTree>[1])
+  })
+
+  ipcMain.handle(IPC.GitDiff, async (_e, path: string) => {
+    if (typeof path !== 'string' || path.length === 0) {
+      return { ok: false, reason: 'path required' }
+    }
+    return getGitDiff(path)
   })
 
   ipcMain.handle(IPC.RevealInFinder, async (_e, path: string) => {
