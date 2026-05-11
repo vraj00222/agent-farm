@@ -9,7 +9,7 @@ import {
 } from '../shared/ipc'
 import { logger } from './logger'
 import { forgetProject, listRecentProjects } from './settings'
-import { inspectPath, openProjectDialog } from './project'
+import { cloneProject, inspectPath, openProjectDialog } from './project'
 import { detectClaude } from './claude'
 import { listProjectTree } from './fs-list'
 import { getGitDiff } from './git-diff'
@@ -21,6 +21,8 @@ import {
   resizePty,
   writePty,
 } from './pty'
+import { killAgent, killAgentsForWebContents, spawnAgent } from './agent-runner'
+import type { AgentSpawnOptions, ProjectCloneOptions } from '../shared/ipc'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -55,6 +57,7 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     if (mainWindow) {
       killSessionsForWebContents(mainWindow.webContents.id)
+      killAgentsForWebContents(mainWindow.webContents.id)
     }
     mainWindow = null
   })
@@ -158,6 +161,18 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.PtyKill, async (_e, sessionId: string) => {
     killPty(sessionId)
+  })
+
+  ipcMain.handle(IPC.AgentSpawn, async (e, opts: AgentSpawnOptions) => {
+    return spawnAgent(opts, e.sender.id)
+  })
+
+  ipcMain.handle(IPC.AgentKill, async (_e, agentId: string) => {
+    return killAgent(agentId)
+  })
+
+  ipcMain.handle(IPC.ProjectClone, async (_e, opts: ProjectCloneOptions) => {
+    return cloneProject(opts)
   })
 }
 

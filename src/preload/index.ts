@@ -2,12 +2,17 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { homedir } from 'node:os'
 import {
   IPC,
+  type AgentEvent,
   type AgentFarmApi,
+  type AgentSpawnOptions,
+  type AgentSpawnResult,
   type ClaudeStatus,
   type FsListOptions,
   type FsListResult,
   type GitDiffResult,
   type LogPayload,
+  type ProjectCloneOptions,
+  type ProjectCloneResult,
   type ProjectOpenResult,
   type PtyCreateOptions,
   type PtyCreateResult,
@@ -29,10 +34,24 @@ const api: AgentFarmApi = {
   project: {
     open: (path?: string): Promise<ProjectOpenResult> =>
       ipcRenderer.invoke(IPC.ProjectOpen, path),
+    clone: (opts: ProjectCloneOptions): Promise<ProjectCloneResult> =>
+      ipcRenderer.invoke(IPC.ProjectClone, opts),
     recent: {
       list: (): Promise<RecentProject[]> => ipcRenderer.invoke(IPC.ProjectRecentList),
       forget: (path: string): Promise<RecentProject[]> =>
         ipcRenderer.invoke(IPC.ProjectRecentForget, path),
+    },
+  },
+
+  agent: {
+    spawn: (opts: AgentSpawnOptions): Promise<AgentSpawnResult> =>
+      ipcRenderer.invoke(IPC.AgentSpawn, opts),
+    kill: (agentId: string): Promise<{ ok: boolean; reason?: string }> =>
+      ipcRenderer.invoke(IPC.AgentKill, agentId),
+    onEvent: (cb: (e: AgentEvent) => void): (() => void) => {
+      const listener = (_e: IpcRendererEvent, payload: AgentEvent) => cb(payload)
+      ipcRenderer.on(IPC.AgentEvent, listener)
+      return () => ipcRenderer.removeListener(IPC.AgentEvent, listener)
     },
   },
 

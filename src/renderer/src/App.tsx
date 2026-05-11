@@ -8,11 +8,17 @@ import { WelcomeScreen } from './components/WelcomeScreen'
 import { Onboarding } from './components/Onboarding'
 import { ClaudeLoginPanel } from './components/ClaudeLoginPanel'
 import { CreateProjectModal, type CreateProjectInput } from './components/CreateProjectModal'
+import { CloneGitHubModal } from './components/CloneGitHubModal'
 import { TabStrip } from './components/TabStrip'
 import { RightPanel } from './components/RightPanel'
 import type { Agent, SessionMeta } from './types/agent'
 import type { ProjectTab } from './types/project'
-import type { AgentFarmApi, ClaudeStatus, RecentProject } from '../../shared/ipc'
+import type {
+  AgentEvent,
+  AgentFarmApi,
+  ClaudeStatus,
+  RecentProject,
+} from '../../shared/ipc'
 
 declare global {
   interface Window {
@@ -58,6 +64,7 @@ export function App() {
   const [projects, setProjects] = useState<ProjectTab[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [cloneOpen, setCloneOpen] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | 'loading'>('loading')
   const [bypassOnboarding, setBypassOnboarding] = useState(false)
   const [recents, setRecents] = useState<RecentProject[]>([])
@@ -100,6 +107,16 @@ export function App() {
     void detectClaude()
     void refreshRecents()
   }, [detectClaude, refreshRecents])
+
+  // ── Agent event subscription: main is the source of truth for agents ──
+  useEffect(() => {
+    const api = window.agentFarm
+    if (!api) return
+    const unsubscribe = api.agent.onEvent((ev) => {
+      setProjects((prev) => applyAgentEvent(prev, ev))
+    })
+    return unsubscribe
+  }, [])
 
   const claudeVersion =
     claudeStatus !== 'loading' && 'version' in claudeStatus ? claudeStatus.version : null
@@ -180,8 +197,44 @@ export function App() {
   }
 
   const handleOpenGitHub = () => {
-    setOpenError('GitHub clone lands in the next release. Open a local folder for now.')
+    setCloneOpen(true)
   }
+
+  const handleClone = useCallback(
+    async (opts: { url: string; parentPath: string }) => {
+      const api = window.agentFarm
+      if (!api) return { ok: false as const, reason: 'IPC bridge unavailable' }
+      const result = await api.project.clone(opts)
+      if (result.ok) {
+        const p = result.project
+        setProjects((prev) => {
+          const existing = prev.find((t) => t.path === p.path)
+          if (existing) {
+            setActiveId(existing.id)
+            return prev
+          }
+          const tab: ProjectTab = {
+            id: makeTabId(p.path),
+            path: p.path,
+            repoName: p.repoName,
+            isGitRepo: p.isGitRepo,
+            hasIndexHtml: p.hasIndexHtml,
+            baseSha: p.baseSha,
+            agents: [],
+            selectedAgentId: null,
+            model: 'default',
+          }
+          setActiveId(tab.id)
+          return [...prev, tab]
+        })
+        void refreshRecents()
+      }
+      return result.ok
+        ? { ok: true as const }
+        : { ok: false as const, reason: result.reason }
+    },
+    [refreshRecents],
+  )
 
   const handleQuickStart = () => {
     // Insert a demo tab using a synthetic path so it shows up like a real
@@ -363,6 +416,14 @@ export function App() {
         onClose={() => setCreateOpen(false)}
         onCreate={handleCreate}
       />
+      <CloneGitHubModal
+        open={cloneOpen}
+        defaultParent={
+          window.agentFarm?.home ? `${window.agentFarm.home}/Developer` : '/'
+        }
+        onClose={() => setCloneOpen(false)}
+        onClone={handleClone}
+      />
     </>
   )
 }
@@ -485,44 +546,62 @@ function SessionView({
     [tab.agents, tab.selectedAgentId],
   )
 
-  const handleSubmit = (prompt: string) => {
+  const handleSubmit = async (prompt: string) => {
+    const api = window.agentFarm
+    if (!api) return
     if (!tab.isGitRepo) {
-      // Surface why nothing happened.
-      void window.agentFarm?.log({
+      void api.log({
         level: 'warn',
         message: 'spawn blocked: not a git repo',
         data: { path: tab.path },
       })
+      // Surface to user via a transient pseudo-agent so they see WHY.
+      const id = `not-git-${Date.now()}`
+      onUpdate((t) => ({
+        ...t,
+        agents: [
+          ...t.agents,
+          {
+            id,
+            branch: '(none)',
+            worktreePath: tab.path,
+            prompt,
+            state: 'failed',
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+            elapsedMs: 0,
+            exitCode: null,
+            pid: null,
+            commits: [],
+            filesChanged: [],
+            autoCommitted: false,
+            lastLines: [
+              'Agent spawning needs a git repo. Run `git init` in the project root and try again.',
+            ],
+            usage: null,
+            error: 'not_a_git_repo',
+          },
+        ],
+        selectedAgentId: id,
+      }))
       return
     }
-    const id = slugify(prompt)
-    const next: Agent = {
-      id,
-      branch: `agent/${id}`,
-      worktreePath: `${tab.path}-${id}`,
-      prompt,
-      state: 'running',
-      startedAt: Date.now(),
-      endedAt: null,
-      elapsedMs: null,
-      exitCode: null,
-      pid: null,
-      commits: [],
-      filesChanged: [],
-      autoCommitted: false,
-      lastLines: [
-        `$ claude -p --dangerously-skip-permissions${
-          tab.model !== 'default' ? ` --model ${tab.model}` : ''
-        } "${prompt}"`,
-        '(stub: main-process spawn arrives in the next release)',
-      ],
-      usage: null,
+    if (!claudeBinary) {
+      void api.log({ level: 'warn', message: 'spawn blocked: no claude binary' })
+      return
     }
-    onUpdate((t) => ({
-      ...t,
-      agents: [...t.agents, next],
-      selectedAgentId: id,
-    }))
+    const result = await api.agent.spawn({
+      projectPath: tab.path,
+      prompt,
+      model: tab.model,
+      claudeBinary,
+    })
+    if (!result.ok) {
+      void api.log({ level: 'error', message: 'spawn failed', data: { reason: result.reason } })
+    }
+    // No local update on success: the AgentEvent('spawn') will arrive and
+    // applyAgentEvent reduces it into the projects array. That avoids
+    // double-writing.
   }
 
   const handleSelect = (id: string) => {
@@ -656,21 +735,79 @@ function ProjectPathBar({ path, isGitRepo }: { path: string; isGitRepo: boolean 
   )
 }
 
-const STOPWORDS = new Set([
-  'the', 'a', 'an', 'in', 'to', 'for', 'of', 'and', 'or',
-  'with', 'on', 'at', 'by', 'from', 'as', 'is', 'be',
-])
-
-function slugify(prompt: string): string {
-  const slug = prompt
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter((w) => !STOPWORDS.has(w))
-    .slice(0, 4)
-    .join('-')
-  return slug || 'task'
+/** Reduce an AgentEvent into the projects array. We find the project tab
+ *  that owns the agent (or, on `spawn`, the one matching `projectPath`)
+ *  and update its `agents` list. */
+function applyAgentEvent(prev: ProjectTab[], ev: AgentEvent): ProjectTab[] {
+  switch (ev.kind) {
+    case 'spawn': {
+      const next: Agent = {
+        id: ev.agentId,
+        branch: ev.branch,
+        worktreePath: ev.worktreePath,
+        prompt: ev.prompt,
+        state: 'queued',
+        startedAt: ev.startedAt,
+        endedAt: null,
+        elapsedMs: null,
+        exitCode: null,
+        pid: ev.pid,
+        commits: [],
+        filesChanged: [],
+        autoCommitted: false,
+        lastLines: [],
+        usage: null,
+      }
+      return prev.map((t) =>
+        t.path === ev.projectPath
+          ? {
+              ...t,
+              agents: [...t.agents.filter((a) => a.id !== next.id), next],
+              selectedAgentId: next.id,
+            }
+          : t,
+      )
+    }
+    case 'state': {
+      return prev.map((t) => {
+        if (!t.agents.some((a) => a.id === ev.agentId)) return t
+        return {
+          ...t,
+          agents: t.agents.map((a) => {
+            if (a.id !== ev.agentId) return a
+            if (ev.state === 'running') return { ...a, state: 'running' }
+            // terminal state
+            return {
+              ...a,
+              state: ev.state === 'done' ? 'done' : 'failed',
+              exitCode: ev.exitCode,
+              endedAt: ev.endedAt,
+              elapsedMs: ev.elapsedMs,
+              filesChanged: ev.filesChanged,
+              commits: ev.commits,
+            }
+          }),
+        }
+      })
+    }
+    case 'output': {
+      return prev.map((t) => {
+        if (!t.agents.some((a) => a.id === ev.agentId)) return t
+        return {
+          ...t,
+          agents: t.agents.map((a) => {
+            if (a.id !== ev.agentId) return a
+            // Join with newlines so we don't lose line breaks, append new
+            // chunk (which may contain partial lines), split, cap at 500.
+            const joined = a.lastLines.join('\n') + ev.text
+            const lines = joined.split('\n')
+            const trimmed = lines.slice(-500)
+            return { ...a, lastLines: trimmed }
+          }),
+        }
+      })
+    }
+  }
 }
 
 declare const __APP_VERSION__: string
