@@ -11,14 +11,24 @@
 // ── Project lifecycle ────────────────────────────────────────────────
 
 export interface ProjectInfo {
-  /** Absolute path to the repo root (`git rev-parse --show-toplevel`). */
+  /** Absolute path to the project root. For git repos this is the repo
+   *  top-level (`git rev-parse --show-toplevel`); for non-git folders it's
+   *  exactly the path the user picked. */
   path: string
   /** Last segment of `path`. Used as a display name. */
   repoName: string
-  /** HEAD SHA at open time. Empty string for a freshly-init'd repo with no commits. */
+  /** HEAD SHA at open time. Empty for non-git or fresh git repos. */
   baseSha: string
-  /** True if `git status --porcelain` returned anything. */
+  /** True if the folder is a git working tree. Non-git folders open with
+   *  reduced affordances — you can preview / edit but worktree-based agent
+   *  spawning needs a git repo. The session view should offer
+   *  "Initialize as git" if this is false. */
+  isGitRepo: boolean
+  /** True if `git status --porcelain` returned anything. False for non-git. */
   dirty: boolean
+  /** True if the folder contains an `index.html` at the root — drives the
+   *  preview affordance. */
+  hasIndexHtml: boolean
 }
 
 export interface RecentProject {
@@ -31,7 +41,6 @@ export interface RecentProject {
 export type ProjectOpenResult =
   | { ok: true; project: ProjectInfo }
   | { ok: false; reason: 'cancelled' }
-  | { ok: false; reason: 'not_a_git_repo'; path: string }
   | { ok: false; reason: 'unreadable'; path: string; message: string }
 
 // ── Claude detection ─────────────────────────────────────────────────
@@ -52,6 +61,37 @@ export const ALLOWED_EXTERNAL_HOSTS = [
   'www.anthropic.com',
   'github.com',
 ] as const
+
+// ── Embedded PTY ─────────────────────────────────────────────────────
+
+export interface PtyCreateOptions {
+  /** Absolute binary path. Required — we don't search PATH inside main. */
+  command: string
+  /** Args. */
+  args: string[]
+  /** Working directory. */
+  cwd: string
+  /** Initial terminal size in cells. */
+  cols: number
+  rows: number
+  /** Optional env merged onto process.env. */
+  env?: Record<string, string>
+}
+
+export type PtyCreateResult =
+  | { ok: true; sessionId: string }
+  | { ok: false; message: string }
+
+export interface PtyDataEvent {
+  sessionId: string
+  data: string
+}
+
+export interface PtyExitEvent {
+  sessionId: string
+  exitCode: number | null
+  signal: number | null
+}
 
 // ── Logging ──────────────────────────────────────────────────────────
 
@@ -74,6 +114,13 @@ export const IPC = {
   ClaudeDetect: 'claude:detect',
   OpenExternal: 'shell:open-external',
   Log: 'log:write',
+  PtyCreate: 'pty:create',
+  PtyWrite: 'pty:write',
+  PtyResize: 'pty:resize',
+  PtyKill: 'pty:kill',
+  /** Event channels (main → renderer). */
+  PtyData: 'pty:data',
+  PtyExit: 'pty:exit',
 } as const
 
 // ── Renderer surface (the window.agentFarm.* contract) ───────────────
@@ -95,6 +142,8 @@ export type Platform =
 export interface AgentFarmApi {
   platform: Platform
   arch: string
+  /** Absolute path to the user's home directory. Renderer-safe convenience. */
+  home: string
   versions: { node: string; chrome: string; electron: string }
 
   project: {
@@ -108,6 +157,15 @@ export interface AgentFarmApi {
 
   claude: {
     detect(): Promise<ClaudeStatus>
+  }
+
+  pty: {
+    create(opts: PtyCreateOptions): Promise<PtyCreateResult>
+    write(sessionId: string, data: string): Promise<void>
+    resize(sessionId: string, cols: number, rows: number): Promise<void>
+    kill(sessionId: string): Promise<void>
+    onData(cb: (e: PtyDataEvent) => void): () => void
+    onExit(cb: (e: PtyExitEvent) => void): () => void
   }
 
   /** Opens an external URL via shell.openExternal after host allowlist check. */

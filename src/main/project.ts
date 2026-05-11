@@ -64,6 +64,15 @@ export async function openProjectDialog(
   return inspectPath(picked)
 }
 
+async function hasIndexHtml(dir: string): Promise<boolean> {
+  try {
+    const stat = await fs.stat(`${dir}/index.html`)
+    return stat.isFile()
+  } catch {
+    return false
+  }
+}
+
 export async function inspectPath(path: string): Promise<ProjectOpenResult> {
   try {
     const stat = await fs.stat(path)
@@ -76,21 +85,31 @@ export async function inspectPath(path: string): Promise<ProjectOpenResult> {
   }
 
   const top = await gitTopLevel(path)
-  if (!top) {
-    await logger.warn('open_project rejected: not a git repo', { path })
-    return { ok: false, reason: 'not_a_git_repo', path }
-  }
+  const root = top ?? path
+  const isGitRepo = top !== null
 
-  const [baseSha, dirty] = await Promise.all([getHeadSha(top), isDirty(top)])
+  const [baseSha, dirty, indexHtml] = await Promise.all([
+    isGitRepo ? getHeadSha(root) : Promise.resolve(''),
+    isGitRepo ? isDirty(root) : Promise.resolve(false),
+    hasIndexHtml(root),
+  ])
 
   const info: ProjectInfo = {
-    path: top,
-    repoName: basename(top),
+    path: root,
+    repoName: basename(root),
     baseSha,
+    isGitRepo,
     dirty,
+    hasIndexHtml: indexHtml,
   }
 
   await rememberProject({ path: info.path, repoName: info.repoName })
-  await logger.info('open_project ok', { path: info.path, baseSha: info.baseSha, dirty: info.dirty })
+  await logger.info('open_project ok', {
+    path: info.path,
+    isGitRepo,
+    baseSha,
+    dirty,
+    hasIndexHtml: indexHtml,
+  })
   return { ok: true, project: info }
 }

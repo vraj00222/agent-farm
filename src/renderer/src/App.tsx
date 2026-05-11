@@ -6,6 +6,7 @@ import { PromptBar } from './components/PromptBar'
 import { StatusStrip } from './components/StatusStrip'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { Onboarding } from './components/Onboarding'
+import { ClaudeLoginPanel } from './components/ClaudeLoginPanel'
 import { CreateProjectModal, type CreateProjectInput } from './components/CreateProjectModal'
 import type { ClaudeModel } from './components/ModelPicker'
 import type { Agent, SessionMeta } from './types/agent'
@@ -67,6 +68,7 @@ export function App() {
   const [bypassOnboarding, setBypassOnboarding] = useState(false)
   const [recents, setRecents] = useState<RecentProject[]>([])
   const [openError, setOpenError] = useState<string | null>(null)
+  const [loginFlow, setLoginFlow] = useState<{ binaryPath: string } | null>(null)
 
   const platform = window.agentFarm?.platform ?? 'browser'
 
@@ -125,10 +127,7 @@ export function App() {
     const result = await api.project.open(path)
     if (!result.ok) {
       if (result.reason === 'cancelled') return
-      const msg =
-        result.reason === 'not_a_git_repo'
-          ? `Not a git repo: ${result.path}. Run "git init" in that folder first.`
-          : `Couldn't open ${result.path}: ${result.message}`
+      const msg = `Couldn't open ${result.path}: ${result.message}`
       setOpenError(msg)
       void api.log({ level: 'warn', message: 'open project failed', data: { result } })
       void refreshRecents()
@@ -143,6 +142,11 @@ export function App() {
       },
       [],
     )
+    if (!result.project.isGitRepo) {
+      setOpenError(
+        `Opened ${result.project.repoName} (not a git repo — agent spawning needs git, but you can browse and preview).`,
+      )
+    }
     void refreshRecents()
   }
 
@@ -174,9 +178,35 @@ export function App() {
     void window.agentFarm?.openExternal('https://docs.claude.com/en/docs/claude-code/setup')
   }
 
+  /**
+   * Open the embedded login terminal. Requires the binary to already be on
+   * disk (so 'missing' state can't reach here). On 'unauthed' or 'ok' (when
+   * the user wants to re-auth), we have a binary path; pass it through.
+   */
   const handleOpenSignIn = () => {
-    void window.agentFarm?.openExternal('https://claude.ai/login')
+    const path =
+      claudeStatus !== 'loading' && 'binaryPath' in claudeStatus
+        ? claudeStatus.binaryPath
+        : null
+    if (!path) {
+      // Fallback for the missing-binary case: open the install docs instead.
+      void window.agentFarm?.openExternal('https://docs.claude.com/en/docs/claude-code/setup')
+      return
+    }
+    setLoginFlow({ binaryPath: path })
   }
+
+  const handleLoginRecheck = useCallback(async () => {
+    await detectClaude()
+    // We don't auto-close the panel — the user may want to read the terminal
+    // output. They can hit Cancel when ready. But if detection now reports
+    // ok, dismiss to drop them back into the welcome flow.
+    const api = window.agentFarm
+    if (api) {
+      const fresh = await api.claude.detect()
+      if (fresh.state === 'ok') setLoginFlow(null)
+    }
+  }, [detectClaude])
 
   // ── Onboarding gate ─────────────────────────────────────────────────
   const needsOnboarding =
@@ -185,7 +215,7 @@ export function App() {
 
   if (needsOnboarding && view.kind === 'welcome') {
     return (
-      <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
+      <div className="relative h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
         <header
           className="drag flex items-center justify-end
                      bg-bone dark:bg-coal
@@ -221,17 +251,27 @@ export function App() {
                     : 'claude ready'
           }
         />
+
+        {loginFlow && (
+          <ClaudeLoginPanel
+            binaryPath={loginFlow.binaryPath}
+            cwd={window.agentFarm?.home ?? '/'}
+            onClose={() => setLoginFlow(null)}
+            onRecheck={handleLoginRecheck}
+          />
+        )}
       </div>
     )
   }
 
   // ── Welcome ─────────────────────────────────────────────────────────
   if (view.kind === 'welcome') {
+    const claudeIsOk = claudeStatus !== 'loading' && claudeStatus.state === 'ok'
     return (
       <>
-        <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
+        <div className="relative h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
           <header
-            className="drag flex items-center justify-end
+            className="drag flex items-center justify-between
                        bg-bone dark:bg-coal
                        border-b border-line dark:border-line-dark px-4"
             style={{ height: 'var(--titlebar-h)', paddingLeft: 90 }}
@@ -239,6 +279,18 @@ export function App() {
             <span className="font-mono text-[10px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
               agent farm  ·  v{__APP_VERSION__}
             </span>
+            {claudeIsOk && (
+              <button
+                type="button"
+                onClick={handleOpenSignIn}
+                className="no-drag font-mono text-[10px] uppercase tracking-cap
+                           text-ink-400 dark:text-chalk-subtle
+                           hover:text-ink-900 dark:hover:text-chalk
+                           transition-colors duration-150"
+              >
+                sign in again
+              </button>
+            )}
           </header>
 
           <main className="flex-1 overflow-hidden">
@@ -258,11 +310,20 @@ export function App() {
             message={
               openError
                 ? openError
-                : claudeStatus !== 'loading' && claudeStatus.state === 'ok'
-                  ? `claude ${claudeStatus.version}`
+                : claudeIsOk
+                  ? `claude ${(claudeStatus as { version: string }).version}`
                   : 'welcome'
             }
           />
+
+          {loginFlow && (
+            <ClaudeLoginPanel
+              binaryPath={loginFlow.binaryPath}
+              cwd={window.agentFarm?.home ?? '/'}
+              onClose={() => setLoginFlow(null)}
+              onRecheck={handleLoginRecheck}
+            />
+          )}
         </div>
 
         <CreateProjectModal
