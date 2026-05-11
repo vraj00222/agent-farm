@@ -29,7 +29,9 @@ export function RightPanel({
   isGitRepo,
   claudeBinary,
 }: RightPanelProps) {
-  const [tab, setTab] = useState<Tab>('terminal')
+  // Default to Files now that the middle pane is the live claude shell —
+  // opening the right panel is more useful for file-tree / diff context.
+  const [tab, setTab] = useState<Tab>('files')
 
   return (
     <div
@@ -156,13 +158,18 @@ function TerminalPane({
       <EmbeddedTerminal
         key={projectId}
         spawn={{
-          // Passing --dangerously-skip-permissions on the embedded terminal
-          // bypasses claude's per-folder trust prompt + tool permission
-          // ladder for every new project the user opens. Same flag we use
-          // for headless spawns. The user has already opted into Agent
-          // Farm; they don't want to confirm trust 20 times.
+          // --dangerously-skip-permissions bypasses the per-folder trust
+          // prompt + tool permission ladder.
+          // --setting-sources project,local tells claude to skip
+          // ~/.claude/settings.json. If the user's global settings file
+          // has malformed permissions entries claude refuses to silently
+          // ignore them — so we just don't load that source at all here.
           command: claudeBinary,
-          args: ['--dangerously-skip-permissions'],
+          args: [
+            '--dangerously-skip-permissions',
+            '--setting-sources',
+            'project,local',
+          ],
           cwd: projectPath,
           cols: 80,
           rows: 24,

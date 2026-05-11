@@ -99,7 +99,15 @@ export async function spawnAgent(
 
   // 3. Build the claude command. `-p` (print mode) is non-interactive,
   //    streams to stdout then exits.
-  const args = ['-p', '--dangerously-skip-permissions']
+  //    --setting-sources project,local tells claude to skip
+  //    ~/.claude/settings.json — if the user has malformed permissions
+  //    entries there, we don't want every spawn to surface them.
+  const args = [
+    '-p',
+    '--dangerously-skip-permissions',
+    '--setting-sources',
+    'project,local',
+  ]
   if (model && model !== 'default') {
     args.push('--model', model)
   }

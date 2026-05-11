@@ -299,10 +299,13 @@ export function App() {
 
   const activeTab = projects.find((t) => t.id === activeId) ?? null
   const claudeIsOk = claudeStatus !== 'loading' && claudeStatus.state === 'ok'
-  const rightPanelOpen = activeTab ? rightPanelByTab[activeTab.id] ?? true : false
+  // Default closed — the middle pane already hosts an interactive claude
+  // shell, so the right panel's terminal is redundant out of the gate.
+  // Files + Diff are one click away via the toggle.
+  const rightPanelOpen = activeTab ? rightPanelByTab[activeTab.id] ?? false : false
   const toggleRightPanel = () => {
     if (!activeTab) return
-    setRightPanelByTab((m) => ({ ...m, [activeTab.id]: !(m[activeTab.id] ?? true) }))
+    setRightPanelByTab((m) => ({ ...m, [activeTab.id]: !(m[activeTab.id] ?? false) }))
   }
 
   if (needsOnboarding) {
@@ -647,7 +650,11 @@ function SessionView({
         </aside>
 
         <main className="overflow-hidden bg-bone dark:bg-coal min-w-0">
-          <MainPanel agent={selectedAgent} />
+          <MainPanel
+            agent={selectedAgent}
+            projectPath={tab.path}
+            claudeBinary={claudeBinary}
+          />
         </main>
 
         {rightPanelOpen && (
