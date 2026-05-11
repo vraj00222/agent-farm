@@ -113,6 +113,7 @@ export const IPC = {
   ProjectRecentForget: 'project:recent:forget',
   ClaudeDetect: 'claude:detect',
   OpenExternal: 'shell:open-external',
+  RevealInFinder: 'shell:reveal',
   Log: 'log:write',
   PtyCreate: 'pty:create',
   PtyWrite: 'pty:write',
@@ -170,6 +171,9 @@ export interface AgentFarmApi {
 
   /** Opens an external URL via shell.openExternal after host allowlist check. */
   openExternal(url: string): Promise<{ ok: boolean; reason?: string }>
+
+  /** Reveals a local path in Finder (macOS) / Explorer (Windows). */
+  revealInFinder(path: string): Promise<{ ok: boolean; reason?: string }>
 
   log(payload: LogPayload): Promise<void>
 }

@@ -17,12 +17,18 @@
   html, body, #root { height: 100%; width: 100%; }
 
   body {
-    @apply bg-bone text-ink font-sans antialiased;
+    @apply bg-bone text-ink font-sans antialiased font-medium;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
     font-feature-settings: 'cv11', 'ss01', 'kern', 'tnum';
   }
+
+  /* Geist at small sizes reads wispy at weight 400. Bump anything tiny up
+     to medium/semibold so the UI doesn't feel anaemic. */
+  .font-mono { font-weight: 500; }
+  button, .btn-primary, .btn-ghost { font-weight: 600; }
+  kbd { font-weight: 500; }
 
   @media (prefers-color-scheme: dark) {
     body { @apply bg-coal text-chalk; }

@@ -50,16 +50,17 @@ export function WelcomeScreen({
           <button
             type="button"
             onClick={onDemo}
-            className="group inline-flex items-center gap-2 text-[12px] no-drag
-                       text-ink-500 dark:text-chalk-dim
+            className="no-drag inline-flex items-center gap-2 px-4 py-2 rounded-md
+                       border border-line dark:border-line-dark
+                       hover:border-ink-500 dark:hover:border-chalk-dim
+                       hover:bg-bone-raised dark:hover:bg-coal-raised
+                       text-ink-700 dark:text-chalk-dim
                        hover:text-ink-900 dark:hover:text-chalk
-                       transition-colors duration-150"
+                       font-display font-semibold text-[12.5px]
+                       transition-all duration-150"
             style={{ animationDelay: '700ms' }}
           >
-            <span>Or try the demo session</span>
-            <span className="font-mono text-[14px] transition-transform duration-200 ease-quart-out group-hover:translate-x-0.5">
-              →
-            </span>
+            Try the demo session
           </button>
         )}
       </div>
@@ -220,24 +221,27 @@ function Recents({
       >
         recent projects
       </p>
-      <ul className="flex flex-col">
+      <ul className="flex flex-col gap-1.5">
         {recents.map((r) => (
           <li
             key={r.path}
-            className="group flex items-baseline justify-between gap-3
-                       border-b border-line dark:border-line-dark last:border-b-0
-                       py-2 px-1"
+            className="group flex items-stretch gap-1.5"
           >
             <button
               type="button"
               onClick={() => onOpen(r.path)}
-              className="flex-1 min-w-0 text-left no-drag flex items-baseline gap-3
-                         hover:text-ink-900 dark:hover:text-chalk transition-colors"
+              className="flex-1 min-w-0 no-drag text-left flex items-baseline gap-3
+                         px-3 py-2 rounded-md
+                         border border-line dark:border-line-dark
+                         hover:border-ink-500 dark:hover:border-chalk-dim
+                         hover:bg-bone-raised dark:hover:bg-coal-raised
+                         transition-all duration-150"
+              title={r.path}
             >
-              <span className="font-display font-medium text-[13px] text-ink-800 dark:text-chalk truncate">
+              <span className="font-display font-semibold text-[13px] text-ink-900 dark:text-chalk truncate">
                 {r.repoName}
               </span>
-              <span className="font-mono text-[10.5px] text-ink-400 dark:text-chalk-subtle truncate">
+              <span className="font-mono text-[10.5px] text-ink-500 dark:text-chalk-dim truncate">
                 {r.path}
               </span>
             </button>
@@ -246,10 +250,14 @@ function Recents({
                 type="button"
                 onClick={() => onForget(r.path)}
                 aria-label={`Forget ${r.repoName}`}
-                className="no-drag opacity-0 group-hover:opacity-100
+                title="Remove from recents"
+                className="no-drag px-3 rounded-md
+                           border border-line dark:border-line-dark
+                           hover:border-state-failed
+                           text-ink-500 dark:text-chalk-dim
+                           hover:text-state-failed
                            font-mono text-[10px] uppercase tracking-cap
-                           text-ink-400 dark:text-chalk-subtle
-                           hover:text-state-failed transition-colors"
+                           transition-all duration-150"
               >
                 forget
               </button>

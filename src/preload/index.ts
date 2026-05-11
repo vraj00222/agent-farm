@@ -59,6 +59,8 @@ const api: AgentFarmApi = {
 
   openExternal: (url: string) => ipcRenderer.invoke(IPC.OpenExternal, url),
 
+  revealInFinder: (path: string) => ipcRenderer.invoke(IPC.RevealInFinder, path),
+
   log: (payload: LogPayload): Promise<void> => ipcRenderer.invoke(IPC.Log, payload),
 }
 
