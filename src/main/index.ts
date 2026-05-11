@@ -110,6 +110,19 @@ function registerIpc(): void {
     return { ok: true }
   })
 
+  ipcMain.handle(IPC.RevealInFinder, async (_e, path: string) => {
+    if (typeof path !== 'string' || path.length === 0) {
+      return { ok: false, reason: 'invalid path' }
+    }
+    try {
+      shell.showItemInFolder(path)
+      return { ok: true }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      return { ok: false, reason }
+    }
+  })
+
   ipcMain.handle(IPC.Log, async (_e, payload: LogPayload) => {
     if (!payload || typeof payload.message !== 'string') return
     await logger.fromRenderer(payload)

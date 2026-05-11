@@ -8,8 +8,9 @@ import { WelcomeScreen } from './components/WelcomeScreen'
 import { Onboarding } from './components/Onboarding'
 import { ClaudeLoginPanel } from './components/ClaudeLoginPanel'
 import { CreateProjectModal, type CreateProjectInput } from './components/CreateProjectModal'
-import type { ClaudeModel } from './components/ModelPicker'
+import { TabStrip } from './components/TabStrip'
 import type { Agent, SessionMeta } from './types/agent'
+import type { ProjectTab } from './types/project'
 import type { AgentFarmApi, ClaudeStatus, RecentProject } from '../../shared/ipc'
 
 declare global {
@@ -18,11 +19,11 @@ declare global {
   }
 }
 
-const SAMPLE_AGENTS: Agent[] = [
+const SAMPLE_AGENTS_DEMO: Agent[] = [
   {
     id: 'teach-me-how-use',
     branch: 'agent/teach-me-how-use',
-    worktreePath: '/Users/v/Developer/404museum-teach-me-how-use',
+    worktreePath: '/Users/v/Developer/demo-teach-me-how-use',
     prompt: 'teach me how to use this codebase',
     state: 'running',
     startedAt: Date.now() - 105_000,
@@ -35,34 +36,26 @@ const SAMPLE_AGENTS: Agent[] = [
     autoCommitted: false,
     lastLines: [
       '$ claude -p --dangerously-skip-permissions "teach me how to use this codebase"',
-      'worktree: /Users/v/Developer/404museum-teach-me-how-use',
+      'worktree: /Users/v/Developer/demo-teach-me-how-use',
       'session started (claude-opus-4-7)',
-      '→ Read    /Users/v/Developer/404museum-teach-me-how-use/package.json',
+      '→ Read    package.json',
       '← 1   { ... (+9 lines)',
     ],
     usage: null,
   },
 ]
 
-const DEMO_META: SessionMeta = {
-  baseSha: '94f83c8f12a4d1e9b3c2a8f4d6e1c5b9a2f8e7d1',
-  repoName: '404museum',
-  claudeVersion: 'demo',
-  model: null,
+function makeTabId(path: string): string {
+  return (
+    path.replace(/[^a-z0-9]/gi, '-').slice(-40) +
+    '-' +
+    Math.random().toString(36).slice(2, 6)
+  )
 }
 
-type AppView =
-  | { kind: 'welcome' }
-  | {
-      kind: 'session'
-      meta: SessionMeta
-      agents: Agent[]
-      selectedId: string | null
-    }
-
 export function App() {
-  const [view, setView] = useState<AppView>({ kind: 'welcome' })
-  const [model, setModel] = useState<ClaudeModel>('default')
+  const [projects, setProjects] = useState<ProjectTab[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | 'loading'>('loading')
   const [bypassOnboarding, setBypassOnboarding] = useState(false)
@@ -108,47 +101,70 @@ export function App() {
   const claudeVersion =
     claudeStatus !== 'loading' && 'version' in claudeStatus ? claudeStatus.version : null
 
-  const enterSession = (meta: SessionMeta, agents: Agent[] = []) => {
-    setView({
-      kind: 'session',
-      meta,
-      agents,
-      selectedId: agents[0]?.id ?? null,
-    })
-  }
+  // ── Project open / close / focus ──────────────────────────────────────
 
-  const handleOpenLocal = async (path?: string) => {
-    setOpenError(null)
-    const api = window.agentFarm
-    if (!api) {
-      setOpenError('IPC bridge unavailable.')
-      return
-    }
-    const result = await api.project.open(path)
-    if (!result.ok) {
-      if (result.reason === 'cancelled') return
-      const msg = `Couldn't open ${result.path}: ${result.message}`
-      setOpenError(msg)
-      void api.log({ level: 'warn', message: 'open project failed', data: { result } })
+  const openProject = useCallback(
+    async (path?: string) => {
+      setOpenError(null)
+      const api = window.agentFarm
+      if (!api) {
+        setOpenError('IPC bridge unavailable.')
+        return
+      }
+      const result = await api.project.open(path)
+      if (!result.ok) {
+        if (result.reason === 'cancelled') return
+        setOpenError(`Couldn't open ${result.path}: ${result.message}`)
+        void api.log({ level: 'warn', message: 'open project failed', data: { result } })
+        return
+      }
+      const p = result.project
+      setProjects((prev) => {
+        const existing = prev.find((t) => t.path === p.path)
+        if (existing) {
+          setActiveId(existing.id)
+          return prev
+        }
+        const tab: ProjectTab = {
+          id: makeTabId(p.path),
+          path: p.path,
+          repoName: p.repoName,
+          isGitRepo: p.isGitRepo,
+          hasIndexHtml: p.hasIndexHtml,
+          baseSha: p.baseSha,
+          agents: [],
+          selectedAgentId: null,
+          model: 'default',
+        }
+        setActiveId(tab.id)
+        return [...prev, tab]
+      })
+      if (!p.isGitRepo) {
+        setOpenError(
+          `Opened ${p.repoName} (not a git repo — agent spawning is disabled. Run "git init" to unlock).`,
+        )
+      }
       void refreshRecents()
-      return
-    }
-    enterSession(
-      {
-        baseSha: result.project.baseSha || '0000000',
-        repoName: result.project.repoName,
-        claudeVersion,
-        model: model === 'default' ? null : model,
-      },
-      [],
-    )
-    if (!result.project.isGitRepo) {
-      setOpenError(
-        `Opened ${result.project.repoName} (not a git repo — agent spawning needs git, but you can browse and preview).`,
-      )
-    }
-    void refreshRecents()
-  }
+    },
+    [refreshRecents],
+  )
+
+  const closeTab = useCallback(
+    (id: string) => {
+      setProjects((prev) => {
+        const next = prev.filter((t) => t.id !== id)
+        if (activeId === id) {
+          setActiveId(next[next.length - 1]?.id ?? null)
+        }
+        return next
+      })
+    },
+    [activeId],
+  )
+
+  const updateTab = useCallback((id: string, updater: (t: ProjectTab) => ProjectTab) => {
+    setProjects((prev) => prev.map((t) => (t.id === id ? updater(t) : t)))
+  }, [])
 
   const handleForgetRecent = async (path: string) => {
     const api = window.agentFarm
@@ -161,7 +177,22 @@ export function App() {
   }
 
   const handleQuickStart = () => {
-    enterSession({ ...DEMO_META, claudeVersion: claudeVersion ?? 'demo' }, SAMPLE_AGENTS)
+    // Insert a demo tab using a synthetic path so it shows up like a real
+    // project tab.
+    const id = makeTabId('/demo/agent-farm-sample')
+    const tab: ProjectTab = {
+      id,
+      path: '/Users/demo/agent-farm-sample',
+      repoName: 'agent-farm-sample',
+      isGitRepo: true,
+      hasIndexHtml: false,
+      baseSha: '94f83c8f12a4d1e9b3c2a8f4d6e1c5b9a2f8e7d1',
+      agents: SAMPLE_AGENTS_DEMO,
+      selectedAgentId: SAMPLE_AGENTS_DEMO[0]?.id ?? null,
+      model: 'default',
+    }
+    setProjects((prev) => [...prev, tab])
+    setActiveId(id)
   }
 
   const handleCreate = (input: CreateProjectInput) => {
@@ -174,22 +205,16 @@ export function App() {
     })
   }
 
+  // ── Onboarding gate ──────────────────────────────────────────────────
+
   const handleOpenInstallDocs = () => {
     void window.agentFarm?.openExternal('https://docs.claude.com/en/docs/claude-code/setup')
   }
 
-  /**
-   * Open the embedded login terminal. Requires the binary to already be on
-   * disk (so 'missing' state can't reach here). On 'unauthed' or 'ok' (when
-   * the user wants to re-auth), we have a binary path; pass it through.
-   */
   const handleOpenSignIn = () => {
     const path =
-      claudeStatus !== 'loading' && 'binaryPath' in claudeStatus
-        ? claudeStatus.binaryPath
-        : null
+      claudeStatus !== 'loading' && 'binaryPath' in claudeStatus ? claudeStatus.binaryPath : null
     if (!path) {
-      // Fallback for the missing-binary case: open the install docs instead.
       void window.agentFarm?.openExternal('https://docs.claude.com/en/docs/claude-code/setup')
       return
     }
@@ -198,9 +223,6 @@ export function App() {
 
   const handleLoginRecheck = useCallback(async () => {
     await detectClaude()
-    // We don't auto-close the panel — the user may want to read the terminal
-    // output. They can hit Cancel when ready. But if detection now reports
-    // ok, dismiss to drop them back into the welcome flow.
     const api = window.agentFarm
     if (api) {
       const fresh = await api.claude.detect()
@@ -208,25 +230,18 @@ export function App() {
     }
   }, [detectClaude])
 
-  // ── Onboarding gate ─────────────────────────────────────────────────
   const needsOnboarding =
-    claudeStatus === 'loading' ||
-    (claudeStatus.state !== 'ok' && !bypassOnboarding)
+    claudeStatus === 'loading' || (claudeStatus.state !== 'ok' && !bypassOnboarding)
 
-  if (needsOnboarding && view.kind === 'welcome') {
+  // ── Render ───────────────────────────────────────────────────────────
+
+  const activeTab = projects.find((t) => t.id === activeId) ?? null
+  const claudeIsOk = claudeStatus !== 'loading' && claudeStatus.state === 'ok'
+
+  if (needsOnboarding) {
     return (
       <div className="relative h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
-        <header
-          className="drag flex items-center justify-end
-                     bg-bone dark:bg-coal
-                     border-b border-line dark:border-line-dark px-4"
-          style={{ height: 'var(--titlebar-h)', paddingLeft: 90 }}
-        >
-          <span className="font-mono text-[10px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
-            agent farm  ·  v{__APP_VERSION__}
-          </span>
-        </header>
-
+        <AppTitleBar onSignInAgain={null} />
         <main className="flex-1 overflow-hidden">
           <Onboarding
             status={claudeStatus}
@@ -236,7 +251,6 @@ export function App() {
             onContinueAnyway={() => setBypassOnboarding(true)}
           />
         </main>
-
         <StatusStrip
           platform={platform}
           message={
@@ -251,7 +265,6 @@ export function App() {
                     : 'claude ready'
           }
         />
-
         {loginFlow && (
           <ClaudeLoginPanel
             binaryPath={loginFlow.binaryPath}
@@ -264,131 +277,154 @@ export function App() {
     )
   }
 
-  // ── Welcome ─────────────────────────────────────────────────────────
-  if (view.kind === 'welcome') {
-    const claudeIsOk = claudeStatus !== 'loading' && claudeStatus.state === 'ok'
-    return (
-      <>
-        <div className="relative h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
-          <header
-            className="drag flex items-center justify-between
-                       bg-bone dark:bg-coal
-                       border-b border-line dark:border-line-dark px-4"
-            style={{ height: 'var(--titlebar-h)', paddingLeft: 90 }}
-          >
-            <span className="font-mono text-[10px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
-              agent farm  ·  v{__APP_VERSION__}
-            </span>
-            {claudeIsOk && (
-              <button
-                type="button"
-                onClick={handleOpenSignIn}
-                className="no-drag font-mono text-[10px] uppercase tracking-cap
-                           text-ink-400 dark:text-chalk-subtle
-                           hover:text-ink-900 dark:hover:text-chalk
-                           transition-colors duration-150"
-              >
-                sign in again
-              </button>
-            )}
-          </header>
+  return (
+    <>
+      <div className="relative h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
+        <AppTitleBar onSignInAgain={claudeIsOk ? handleOpenSignIn : null} />
 
-          <main className="flex-1 overflow-hidden">
+        {projects.length > 0 && (
+          <TabStrip
+            tabs={projects}
+            activeId={activeId}
+            onSelect={setActiveId}
+            onClose={closeTab}
+            onAddLocal={() => void openProject()}
+            onAddGitHub={handleOpenGitHub}
+          />
+        )}
+
+        <main className="flex-1 overflow-hidden">
+          {activeTab ? (
+            <SessionView
+              tab={activeTab}
+              onUpdate={(u) => updateTab(activeTab.id, u)}
+              claudeVersion={claudeVersion}
+            />
+          ) : (
             <WelcomeScreen
-              onOpenLocal={() => void handleOpenLocal()}
+              onOpenLocal={() => void openProject()}
               onOpenGitHub={handleOpenGitHub}
               onCreateProject={() => setCreateOpen(true)}
               onDemo={handleQuickStart}
               recents={recents}
-              onOpenRecent={(p) => void handleOpenLocal(p)}
+              onOpenRecent={(p) => void openProject(p)}
               onForgetRecent={(p) => void handleForgetRecent(p)}
             />
-          </main>
+          )}
+        </main>
 
-          <StatusStrip
-            platform={platform}
-            message={
-              openError
-                ? openError
+        <StatusStrip
+          platform={platform}
+          message={
+            openError
+              ? openError
+              : activeTab
+                ? activeTab.path
                 : claudeIsOk
                   ? `claude ${(claudeStatus as { version: string }).version}`
                   : 'welcome'
-            }
-          />
-
-          {loginFlow && (
-            <ClaudeLoginPanel
-              binaryPath={loginFlow.binaryPath}
-              cwd={window.agentFarm?.home ?? '/'}
-              onClose={() => setLoginFlow(null)}
-              onRecheck={handleLoginRecheck}
-            />
-          )}
-        </div>
-
-        <CreateProjectModal
-          open={createOpen}
-          onClose={() => setCreateOpen(false)}
-          onCreate={handleCreate}
+          }
         />
-      </>
-    )
-  }
 
+        {loginFlow && (
+          <ClaudeLoginPanel
+            binaryPath={loginFlow.binaryPath}
+            cwd={window.agentFarm?.home ?? '/'}
+            onClose={() => setLoginFlow(null)}
+            onRecheck={handleLoginRecheck}
+          />
+        )}
+      </div>
+
+      <CreateProjectModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreate={handleCreate}
+      />
+    </>
+  )
+}
+
+/** macOS-style title bar with the brand + a real "Sign in again" button. */
+function AppTitleBar({ onSignInAgain }: { onSignInAgain: (() => void) | null }) {
   return (
-    <SessionView
-      view={view}
-      setView={setView}
-      platform={platform}
-      model={model}
-      onModelChange={setModel}
-    />
+    <header
+      className="drag flex items-center justify-between
+                 bg-bone dark:bg-coal
+                 border-b border-line dark:border-line-dark px-4"
+      style={{ height: 'var(--titlebar-h)', paddingLeft: 90 }}
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="font-display font-semibold text-[13px] tracking-tightest text-ink-900 dark:text-chalk">
+          Agent Farm
+        </span>
+        <span className="font-mono text-[10.5px] text-ink-400 dark:text-chalk-subtle">
+          v{__APP_VERSION__}
+        </span>
+      </div>
+      {onSignInAgain && (
+        <button
+          type="button"
+          onClick={onSignInAgain}
+          onMouseDown={(e) => e.preventDefault()}
+          className="no-drag inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md
+                     border border-line dark:border-line-dark
+                     hover:border-ink-500 dark:hover:border-chalk-dim
+                     hover:bg-bone-raised dark:hover:bg-coal-raised
+                     text-ink-700 dark:text-chalk-dim
+                     hover:text-ink-900 dark:hover:text-chalk
+                     font-display font-semibold text-[11px]
+                     transition-all duration-150"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          Sign in again
+        </button>
+      )}
+    </header>
   )
 }
 
 function SessionView({
-  view,
-  setView,
-  platform,
-  model,
-  onModelChange,
+  tab,
+  onUpdate,
+  claudeVersion,
 }: {
-  view: {
-    kind: 'session'
-    meta: SessionMeta
-    agents: Agent[]
-    selectedId: string | null
-  }
-  setView: (v: AppView) => void
-  platform: string
-  model: ClaudeModel
-  onModelChange: (m: ClaudeModel) => void
+  tab: ProjectTab
+  onUpdate: (updater: (t: ProjectTab) => ProjectTab) => void
+  claudeVersion: string | null
 }) {
-  const { meta, agents, selectedId } = view
-
   const totals = useMemo(
     () =>
-      agents.reduce(
+      tab.agents.reduce(
         (acc, a) => {
           acc[a.state] += 1
           return acc
         },
         { running: 0, done: 0, noop: 0, failed: 0, queued: 0 },
       ),
-    [agents],
+    [tab.agents],
   )
 
   const selectedAgent = useMemo(
-    () => agents.find((a) => a.id === selectedId) ?? null,
-    [agents, selectedId],
+    () => tab.agents.find((a) => a.id === tab.selectedAgentId) ?? null,
+    [tab.agents, tab.selectedAgentId],
   )
 
   const handleSubmit = (prompt: string) => {
+    if (!tab.isGitRepo) {
+      // Surface why nothing happened.
+      void window.agentFarm?.log({
+        level: 'warn',
+        message: 'spawn blocked: not a git repo',
+        data: { path: tab.path },
+      })
+      return
+    }
     const id = slugify(prompt)
     const next: Agent = {
       id,
       branch: `agent/${id}`,
-      worktreePath: `/tmp/preview-${id}`,
+      worktreePath: `${tab.path}-${id}`,
       prompt,
       state: 'running',
       startedAt: Date.now(),
@@ -401,37 +437,48 @@ function SessionView({
       autoCommitted: false,
       lastLines: [
         `$ claude -p --dangerously-skip-permissions${
-          model !== 'default' ? ` --model ${model}` : ''
+          tab.model !== 'default' ? ` --model ${tab.model}` : ''
         } "${prompt}"`,
         '(stub: main-process spawn arrives in the next release)',
       ],
       usage: null,
     }
-    setView({
-      ...view,
-      agents: [...agents, next],
-      selectedId: id,
-    })
+    onUpdate((t) => ({
+      ...t,
+      agents: [...t.agents, next],
+      selectedAgentId: id,
+    }))
   }
 
   const handleSelect = (id: string) => {
-    setView({ ...view, selectedId: id })
+    onUpdate((t) => ({ ...t, selectedAgentId: id }))
   }
 
-  const metaWithModel = { ...meta, model: model === 'default' ? null : model }
+  const meta: SessionMeta = {
+    baseSha: tab.baseSha || '0000000',
+    repoName: tab.repoName,
+    claudeVersion,
+    model: tab.model === 'default' ? null : tab.model,
+  }
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-bone dark:bg-coal">
+    <div className="flex flex-col h-full overflow-hidden">
       <TitleBar
-        meta={metaWithModel}
+        meta={meta}
         totals={totals}
-        model={model}
-        onModelChange={onModelChange}
+        model={tab.model}
+        onModelChange={(m) => onUpdate((t) => ({ ...t, model: m }))}
       />
+
+      <ProjectPathBar path={tab.path} isGitRepo={tab.isGitRepo} />
 
       <div className="flex-1 grid grid-cols-[17rem_1fr] min-h-0">
         <aside className="border-r border-line dark:border-line-dark overflow-y-auto bg-bone dark:bg-coal">
-          <AgentList agents={agents} selectedId={selectedId} onSelect={handleSelect} />
+          <AgentList
+            agents={tab.agents}
+            selectedId={tab.selectedAgentId}
+            onSelect={handleSelect}
+          />
         </aside>
 
         <main className="overflow-hidden bg-bone dark:bg-coal">
@@ -440,10 +487,80 @@ function SessionView({
       </div>
 
       <PromptBar onSubmit={handleSubmit} />
-      <StatusStrip
-        platform={platform}
-        message={selectedAgent ? `selected ${selectedAgent.id}` : `ready · ${meta.repoName}`}
-      />
+    </div>
+  )
+}
+
+function ProjectPathBar({ path, isGitRepo }: { path: string; isGitRepo: boolean }) {
+  const [copied, setCopied] = useState(false)
+
+  const copyPath = async () => {
+    try {
+      await navigator.clipboard.writeText(path)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* clipboard might be unavailable */
+    }
+  }
+
+  const openInFinder = () => {
+    void window.agentFarm?.revealInFinder(path)
+  }
+
+  return (
+    <div
+      className="no-drag flex items-center justify-between gap-3 px-4 py-1.5
+                 border-b border-line dark:border-line-dark
+                 bg-bone-sunk dark:bg-coal-sunk"
+    >
+      <div className="flex items-baseline gap-2 min-w-0 flex-1">
+        <span className="font-mono text-[9.5px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle shrink-0">
+          path
+        </span>
+        <span
+          className="font-mono text-[11px] text-ink-700 dark:text-chalk-dim truncate"
+          title={path}
+        >
+          {path}
+        </span>
+        {!isGitRepo && (
+          <span
+            className="font-mono text-[9.5px] uppercase tracking-cap text-state-failed shrink-0"
+            title="Agent spawning requires a git working tree"
+          >
+            not a git repo
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          type="button"
+          onClick={copyPath}
+          className="px-2 py-1 rounded
+                     font-mono text-[10px] uppercase tracking-cap
+                     border border-line dark:border-line-dark
+                     text-ink-500 dark:text-chalk-dim
+                     hover:border-ink-500 dark:hover:border-chalk-dim
+                     hover:text-ink-900 dark:hover:text-chalk
+                     transition-all duration-100"
+        >
+          {copied ? 'copied' : 'copy'}
+        </button>
+        <button
+          type="button"
+          onClick={openInFinder}
+          className="px-2 py-1 rounded
+                     font-mono text-[10px] uppercase tracking-cap
+                     border border-line dark:border-line-dark
+                     text-ink-500 dark:text-chalk-dim
+                     hover:border-ink-500 dark:hover:border-chalk-dim
+                     hover:text-ink-900 dark:hover:text-chalk
+                     transition-all duration-100"
+        >
+          reveal
+        </button>
+      </div>
     </div>
   )
 }
