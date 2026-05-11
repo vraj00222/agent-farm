@@ -1,59 +1,91 @@
 import clsx from 'clsx'
 import type { Agent } from '@/types/agent'
 import { fmtElapsed, fmtTokens } from '@/lib/format'
+import { EmbeddedTerminal } from './EmbeddedTerminal'
 
 interface MainPanelProps {
   agent: Agent | null
+  /** Used to spawn the project-level interactive claude when no agent is
+   *  selected. Falsy values fall back to the old typographic empty state. */
+  projectPath: string | null
+  claudeBinary: string | null
 }
 
 /**
- * Right pane. Pure tinted B/W. No hero-metric template (no big elapsed
- * gradient + 4-stat grid). Header is a single editorial line. Stats
- * sit inline as small typeset values, not boxed cards.
+ * Middle pane.
+ *   - Agent selected → header + that agent's streamed output.
+ *   - No agent + claude available → live interactive `claude` shell at the
+ *     project root (the actual product surface).
+ *   - No claude / no project → typographic fallback.
  */
-export function MainPanel({ agent }: MainPanelProps) {
-  if (!agent) return <EmptyState />
+export function MainPanel({ agent, projectPath, claudeBinary }: MainPanelProps) {
+  if (agent) {
+    return (
+      <div key={agent.id} className="flex flex-col h-full overflow-hidden animate-fade-in">
+        <Header agent={agent} />
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+          <Tail agent={agent} />
+        </div>
+      </div>
+    )
+  }
 
+  if (projectPath && claudeBinary) {
+    return <CenterTerminal projectPath={projectPath} claudeBinary={claudeBinary} />
+  }
+
+  return <FallbackEmpty />
+}
+
+function CenterTerminal({
+  projectPath,
+  claudeBinary,
+}: {
+  projectPath: string
+  claudeBinary: string
+}) {
   return (
-    <div key={agent.id} className="flex flex-col h-full overflow-hidden animate-fade-in">
-      <Header agent={agent} />
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        <Tail agent={agent} />
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-line dark:border-line-dark">
+        <div className="flex items-baseline gap-3 min-w-0">
+          <span className="label">claude</span>
+          <span className="font-mono text-[11px] text-ink-500 dark:text-chalk-dim truncate">
+            interactive · {projectPath}
+          </span>
+        </div>
+        <span className="font-mono text-[10px] text-ink-400 dark:text-chalk-subtle shrink-0">
+          spawn a task below to run one in an isolated worktree
+        </span>
+      </div>
+      <div className="flex-1 min-h-0 p-2 bg-bone dark:bg-coal">
+        <EmbeddedTerminal
+          key={projectPath}
+          spawn={{
+            command: claudeBinary,
+            args: ['--dangerously-skip-permissions', '--setting-sources', 'project,local'],
+            cwd: projectPath,
+            cols: 100,
+            rows: 28,
+          }}
+        />
       </div>
     </div>
   )
 }
 
-function EmptyState() {
-  // Asymmetric. Not centered. Not a card grid.
+function FallbackEmpty() {
   return (
     <div className="h-full flex flex-col justify-between px-10 py-10">
       <div>
         <p className="label">no session</p>
         <h2 className="font-display text-4xl font-medium tracking-tightest mt-3 max-w-[16ch] leading-[1.05] text-ink-900 dark:text-chalk">
-          Type a task<br />in the bar below.
+          Open a project<br />or sign in to claude.
         </h2>
         <p className="mt-5 text-base text-ink-500 dark:text-chalk-dim leading-relaxed max-w-[42ch]">
-          Each task spawns claude in a fresh git worktree. Up to three
-          run at once; the rest queue automatically.
+          Once both are set up, this pane becomes an interactive claude
+          shell in the project root.
         </p>
       </div>
-
-      {/* Inline numbered list, not a card grid */}
-      <ol className="text-[12.5px] text-ink-500 dark:text-chalk-dim leading-relaxed max-w-[44ch] space-y-2.5">
-        <li>
-          <span className="font-mono text-[10.5px] mr-3 text-ink-400 dark:text-chalk-subtle">01</span>
-          One prompt becomes one branch becomes one worktree.
-        </li>
-        <li>
-          <span className="font-mono text-[10.5px] mr-3 text-ink-400 dark:text-chalk-subtle">02</span>
-          Claude streams structured events back as it works.
-        </li>
-        <li>
-          <span className="font-mono text-[10.5px] mr-3 text-ink-400 dark:text-chalk-subtle">03</span>
-          Cherry-pick the wins. Drop the misses. Main branch stays clean.
-        </li>
-      </ol>
     </div>
   )
 }
