@@ -29,6 +29,8 @@ declare global {
 const SAMPLE_AGENTS_DEMO: Agent[] = [
   {
     id: 'teach-me-how-use',
+    name: 'teach me how to use this codebase',
+    slug: 'teach-me-how-use',
     branch: 'agent/teach-me-how-use',
     worktreePath: '/Users/v/Developer/demo-teach-me-how-use',
     prompt: 'teach me how to use this codebase',
@@ -563,6 +565,8 @@ function SessionView({
           ...t.agents,
           {
             id,
+            name: prompt.slice(0, 60),
+            slug: 'not-git',
             branch: '(none)',
             worktreePath: tab.path,
             prompt,
@@ -743,6 +747,8 @@ function applyAgentEvent(prev: ProjectTab[], ev: AgentEvent): ProjectTab[] {
     case 'spawn': {
       const next: Agent = {
         id: ev.agentId,
+        name: ev.name,
+        slug: ev.slug,
         branch: ev.branch,
         worktreePath: ev.worktreePath,
         prompt: ev.prompt,

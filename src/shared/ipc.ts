@@ -121,7 +121,12 @@ export type AgentEvent =
       projectPath: string
       branch: string
       worktreePath: string
+      /** The prompt the user typed, verbatim. */
       prompt: string
+      /** Human-friendly task name derived from the prompt (truncated). */
+      name: string
+      /** Slug used for the branch + worktree path. */
+      slug: string
       startedAt: number
       pid: number | null
       baseSha: string

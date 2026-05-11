@@ -72,8 +72,11 @@ function Header({ agent }: { agent: Agent }) {
         </span>
       </div>
 
-      <h2 className="font-display text-3xl font-semibold tracking-tightest text-ink-900 dark:text-chalk truncate">
-        {agent.id}
+      <h2
+        className="font-display text-3xl font-semibold tracking-tightest text-ink-900 dark:text-chalk"
+        title={agent.prompt}
+      >
+        {agent.name || agent.slug || agent.id}
       </h2>
 
       {/* Inline metadata row — typeset, not card grid */}
@@ -136,11 +139,14 @@ function stateLabel(state: Agent['state']): string {
 }
 
 function StateGlyph({ state }: { state: Agent['state'] }) {
-  if (state === 'running') return <span className="dot-run" />
-  if (state === 'done') return <span className="dot-done" />
-  if (state === 'failed') return <span className="dot-failed" />
-  if (state === 'noop') return <span className="dot-noop" />
-  return <span className="dot-idle" />
+  const base = 'inline-block w-2 h-2 rounded-full shrink-0'
+  if (state === 'running') {
+    return <span className={clsx(base, 'bg-ink-900 dark:bg-chalk animate-ring-ink dark:animate-ring-chalk')} />
+  }
+  if (state === 'done') return <span className={clsx(base, 'bg-emerald-600 dark:bg-emerald-400')} />
+  if (state === 'failed') return <span className={clsx(base, 'bg-state-failed')} />
+  if (state === 'noop') return <span className={clsx(base, 'bg-ink-300 dark:bg-chalk-subtle')} />
+  return <span className={clsx(base, 'bg-ink-200 dark:bg-coal-raised')} />
 }
 
 function Tail({ agent }: { agent: Agent }) {

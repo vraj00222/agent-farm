@@ -97,19 +97,21 @@ function Row({
               'font-display text-[13px] truncate transition-all duration-150',
               selected
                 ? 'font-semibold text-ink-900 dark:text-chalk'
-                : 'font-medium text-ink-700 dark:text-chalk-dim group-hover:text-ink-900 dark:group-hover:text-chalk'
+                : 'font-semibold text-ink-700 dark:text-chalk-dim group-hover:text-ink-900 dark:group-hover:text-chalk'
             )}
+            title={agent.prompt}
           >
-            {agent.id}
+            {agent.name || agent.slug || agent.id}
           </span>
           <ElapsedTag agent={agent} selected={selected} />
         </div>
 
-        <div className="mt-1 flex items-center gap-2">
-          <StateGlyph state={agent.state} />
+        <div className="mt-1 flex items-center gap-2 min-w-0">
+          <StateDot state={agent.state} />
+          <BranchTag branch={agent.branch} selected={selected} />
           <span
             className={clsx(
-              'text-[11px]',
+              'text-[11px] shrink-0',
               selected ? 'text-ink-600 dark:text-chalk-dim' : 'text-ink-500 dark:text-chalk-dim'
             )}
           >
@@ -166,12 +168,57 @@ function ElapsedTag({ agent, selected }: { agent: Agent; selected: boolean }) {
   )
 }
 
-function StateGlyph({ state }: { state: Agent['state'] }) {
-  if (state === 'running') return <span className="dot-run" />
-  if (state === 'done') return <span className="dot-done" />
-  if (state === 'failed') return <span className="dot-failed" />
-  if (state === 'noop') return <span className="dot-noop" />
-  return <span className="dot-idle" />
+function StateDot({ state }: { state: Agent['state'] }) {
+  // Green for done, red for failed, animated for running. Tinted gray for
+  // queued / noop so they don't compete visually.
+  const base = 'inline-block w-2 h-2 rounded-full shrink-0'
+  if (state === 'running') {
+    return (
+      <span
+        className={clsx(base, 'bg-ink-900 dark:bg-chalk animate-ring-ink dark:animate-ring-chalk')}
+        aria-label="running"
+      />
+    )
+  }
+  if (state === 'done') {
+    return (
+      <span
+        className={clsx(base, 'bg-emerald-600 dark:bg-emerald-400')}
+        aria-label="done"
+      />
+    )
+  }
+  if (state === 'failed') {
+    return <span className={clsx(base, 'bg-state-failed')} aria-label="failed" />
+  }
+  if (state === 'noop') {
+    return <span className={clsx(base, 'bg-ink-300 dark:bg-chalk-subtle')} aria-label="no changes" />
+  }
+  return <span className={clsx(base, 'bg-ink-200 dark:bg-coal-raised')} aria-label="queued" />
+}
+
+function BranchTag({ branch, selected }: { branch: string; selected: boolean }) {
+  return (
+    <span
+      title={branch}
+      className={clsx(
+        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] min-w-0 max-w-[12rem]',
+        'border border-line/70 dark:border-line-dark',
+        selected
+          ? 'text-ink-800 dark:text-chalk'
+          : 'text-ink-500 dark:text-chalk-dim',
+      )}
+    >
+      <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden className="shrink-0">
+        <circle cx="3" cy="3" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <circle cx="3" cy="9" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <circle cx="9" cy="6" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M3 4.6 V7.4" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M3 6 C3 4 5 4 7.4 5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+      <span className="truncate">{branch}</span>
+    </span>
+  )
 }
 
 function labelFor(agent: Agent): string {

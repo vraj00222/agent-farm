@@ -156,8 +156,13 @@ function TerminalPane({
       <EmbeddedTerminal
         key={projectId}
         spawn={{
+          // Passing --dangerously-skip-permissions on the embedded terminal
+          // bypasses claude's per-folder trust prompt + tool permission
+          // ladder for every new project the user opens. Same flag we use
+          // for headless spawns. The user has already opted into Agent
+          // Farm; they don't want to confirm trust 20 times.
           command: claudeBinary,
-          args: [],
+          args: ['--dangerously-skip-permissions'],
           cwd: projectPath,
           cols: 80,
           rows: 24,
