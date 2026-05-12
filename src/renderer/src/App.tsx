@@ -7,6 +7,7 @@ import { StatusStrip } from './components/StatusStrip'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { Onboarding } from './components/Onboarding'
 import { ClaudeLoginPanel } from './components/ClaudeLoginPanel'
+import { GitHubLoginPanel } from './components/GitHubLoginPanel'
 import { CreateProjectModal, type CreateProjectInput } from './components/CreateProjectModal'
 import { CloneGitHubModal } from './components/CloneGitHubModal'
 import { TabStrip } from './components/TabStrip'
@@ -17,6 +18,7 @@ import type {
   AgentEvent,
   AgentFarmApi,
   ClaudeStatus,
+  GitHubStatus,
   RecentProject,
 } from '../../shared/ipc'
 
@@ -68,10 +70,12 @@ export function App() {
   const [createOpen, setCreateOpen] = useState(false)
   const [cloneOpen, setCloneOpen] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | 'loading'>('loading')
+  const [githubStatus, setGitHubStatus] = useState<GitHubStatus>({ state: 'loading' })
   const [bypassOnboarding, setBypassOnboarding] = useState(false)
   const [recents, setRecents] = useState<RecentProject[]>([])
   const [openError, setOpenError] = useState<string | null>(null)
   const [loginFlow, setLoginFlow] = useState<{ binaryPath: string } | null>(null)
+  const [githubFlowOpen, setGitHubFlowOpen] = useState(false)
   /** Per-project right-panel visibility — keyed by tab id. */
   const [rightPanelByTab, setRightPanelByTab] = useState<Record<string, boolean>>({})
 
@@ -105,10 +109,31 @@ export function App() {
     }
   }, [])
 
+  const refreshGitHub = useCallback(async () => {
+    const api = window.agentFarm
+    if (!api) return
+    try {
+      setGitHubStatus(await api.github.status())
+    } catch (err) {
+      setGitHubStatus({
+        state: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }, [])
+
   useEffect(() => {
     void detectClaude()
     void refreshRecents()
-  }, [detectClaude, refreshRecents])
+    void refreshGitHub()
+  }, [detectClaude, refreshRecents, refreshGitHub])
+
+  // Subscribe to push updates from main (e.g. 401-triggered sign-out).
+  useEffect(() => {
+    const api = window.agentFarm
+    if (!api) return
+    return api.github.onStatus((s) => setGitHubStatus(s))
+  }, [])
 
   // ── Agent event subscription: main is the source of truth for agents ──
   useEffect(() => {
@@ -294,8 +319,13 @@ export function App() {
     }
   }, [detectClaude])
 
-  const needsOnboarding =
-    claudeStatus === 'loading' || (claudeStatus.state !== 'ok' && !bypassOnboarding)
+  const handleConnectGitHub = () => setGitHubFlowOpen(true)
+  const handleRetryGitHub = () => void refreshGitHub()
+
+  const claudeBlocking =
+    claudeStatus === 'loading' || claudeStatus.state !== 'ok'
+  const githubBlocking = githubStatus.state !== 'ok'
+  const needsOnboarding = (claudeBlocking || githubBlocking) && !bypassOnboarding
 
   // ── Render ───────────────────────────────────────────────────────────
 
@@ -322,9 +352,12 @@ export function App() {
         <main className="flex-1 overflow-hidden">
           <Onboarding
             status={claudeStatus}
+            githubStatus={githubStatus}
             onRetry={detectClaude}
             onOpenInstallDocs={handleOpenInstallDocs}
             onOpenSignIn={handleOpenSignIn}
+            onConnectGitHub={handleConnectGitHub}
+            onRetryGitHub={handleRetryGitHub}
             onContinueAnyway={() => setBypassOnboarding(true)}
           />
         </main>
@@ -348,6 +381,15 @@ export function App() {
             cwd={window.agentFarm?.home ?? '/'}
             onClose={() => setLoginFlow(null)}
             onRecheck={handleLoginRecheck}
+          />
+        )}
+        {githubFlowOpen && (
+          <GitHubLoginPanel
+            onClose={() => setGitHubFlowOpen(false)}
+            onSuccess={() => {
+              setGitHubFlowOpen(false)
+              void refreshGitHub()
+            }}
           />
         )}
       </div>
@@ -416,6 +458,15 @@ export function App() {
             cwd={window.agentFarm?.home ?? '/'}
             onClose={() => setLoginFlow(null)}
             onRecheck={handleLoginRecheck}
+          />
+        )}
+        {githubFlowOpen && (
+          <GitHubLoginPanel
+            onClose={() => setGitHubFlowOpen(false)}
+            onSuccess={() => {
+              setGitHubFlowOpen(false)
+              void refreshGitHub()
+            }}
           />
         )}
       </div>

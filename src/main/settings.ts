@@ -1,14 +1,24 @@
 import { app } from 'electron'
 import { promises as fs } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { RecentProject } from '../shared/ipc'
+import type { GitHubAccount, RecentProject } from '../shared/ipc'
 
 const SETTINGS_VERSION = 1
 const RECENTS_MAX = 8
 
+/** What we keep on disk for the user's GitHub sign-in. The plaintext token
+ *  lives only in memory in github-auth.ts; here we store the safeStorage
+ *  ciphertext alongside the displayable account fields. */
+export interface StoredGitHub {
+  account: GitHubAccount
+  /** safeStorage.encryptString(token) → base64. Decrypt on app start. */
+  tokenCiphertext: string
+}
+
 interface SettingsShape {
   version: number
   recentProjects: RecentProject[]
+  github?: StoredGitHub
 }
 
 const DEFAULTS: SettingsShape = {
@@ -33,6 +43,7 @@ async function read(): Promise<SettingsShape> {
       recentProjects: Array.isArray(parsed.recentProjects)
         ? parsed.recentProjects.filter(isRecentProject)
         : [],
+      github: isStoredGitHub(parsed.github) ? parsed.github : undefined,
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -56,6 +67,18 @@ function isRecentProject(v: unknown): v is RecentProject {
     typeof r.repoName === 'string' &&
     typeof r.lastOpenedAt === 'number'
   )
+}
+
+function isStoredGitHub(v: unknown): v is StoredGitHub {
+  if (!v || typeof v !== 'object') return false
+  const r = v as Record<string, unknown>
+  if (typeof r.tokenCiphertext !== 'string' || r.tokenCiphertext.length === 0) return false
+  const a = r.account as Record<string, unknown> | undefined
+  if (!a || typeof a !== 'object') return false
+  if (typeof a.login !== 'string' || a.login.length === 0) return false
+  if (a.name !== null && typeof a.name !== 'string') return false
+  if (a.avatarUrl !== null && typeof a.avatarUrl !== 'string') return false
+  return true
 }
 
 /** Atomic write: tmp file + rename. Serialized so concurrent writers don't race. */
@@ -100,4 +123,23 @@ export async function forgetProject(path: string): Promise<RecentProject[]> {
   }
   await persist(next)
   return next.recentProjects
+}
+
+// ── GitHub block ─────────────────────────────────────────────────────
+
+export async function getGitHub(): Promise<StoredGitHub | undefined> {
+  const s = await read()
+  return s.github
+}
+
+export async function setGitHub(gh: StoredGitHub): Promise<void> {
+  const s = await read()
+  await persist({ ...s, github: gh })
+}
+
+export async function clearGitHub(): Promise<void> {
+  const s = await read()
+  const next: SettingsShape = { ...s }
+  delete next.github
+  await persist(next)
 }

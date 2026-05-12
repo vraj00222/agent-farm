@@ -1,40 +1,63 @@
 import clsx from 'clsx'
-import type { ClaudeStatus } from '../../../shared/ipc'
+import type { ClaudeStatus, GitHubStatus } from '../../../shared/ipc'
 
 interface OnboardingProps {
+  /** Claude detection. If not yet 'ok', this gate shows first. */
   status: ClaudeStatus | 'loading'
+  /** GitHub status. Only shown once claude is 'ok'. */
+  githubStatus: GitHubStatus
   onRetry: () => void
   onOpenInstallDocs: () => void
   onOpenSignIn: () => void
+  onConnectGitHub: () => void
+  onRetryGitHub: () => void
   onContinueAnyway?: () => void
 }
 
 /**
- * First-launch / claude-detection screen. Three states:
- *   loading   — checking PATH, version, auth
- *   missing   — claude not on disk; show install instructions
- *   unauthed  — claude installed but `claude config get` empty; show sign-in
- *   error     — claude found but --version failed; show retry
- *   ok        — caller never renders this; we'd render the welcome screen instead
+ * First-launch onboarding gate. Two-stage:
+ *   Stage 1 — Claude (loading / missing / unauthed / error / ok)
+ *   Stage 2 — GitHub  (loading / unauthed / error / ok)
+ *
+ * Renders the first non-ok stage. Welcome screen renders only when both are ok.
  */
 export function Onboarding({
   status,
+  githubStatus,
   onRetry,
   onOpenInstallDocs,
   onOpenSignIn,
+  onConnectGitHub,
+  onRetryGitHub,
   onContinueAnyway,
 }: OnboardingProps) {
+  const claudeOk = status !== 'loading' && status.state === 'ok'
+  const showGithub = claudeOk && githubStatus.state !== 'ok'
+
   return (
     <div className="h-full w-full flex flex-col items-center justify-center px-12 py-16 bg-bone dark:bg-coal">
       <div className="flex flex-col items-center gap-8 max-w-[640px] w-full">
-        <Header status={status} />
-        <Body
-          status={status}
-          onRetry={onRetry}
-          onOpenInstallDocs={onOpenInstallDocs}
-          onOpenSignIn={onOpenSignIn}
-        />
-        {onContinueAnyway && status !== 'loading' && status.state !== 'ok' && (
+        {showGithub ? (
+          <>
+            <GitHubHeader githubStatus={githubStatus} />
+            <GitHubBody
+              status={githubStatus}
+              onConnect={onConnectGitHub}
+              onRetry={onRetryGitHub}
+            />
+          </>
+        ) : (
+          <>
+            <Header status={status} />
+            <Body
+              status={status}
+              onRetry={onRetry}
+              onOpenInstallDocs={onOpenInstallDocs}
+              onOpenSignIn={onOpenSignIn}
+            />
+          </>
+        )}
+        {onContinueAnyway && (
           <button
             type="button"
             onClick={onContinueAnyway}
@@ -42,7 +65,7 @@ export function Onboarding({
                        hover:text-ink-700 dark:hover:text-chalk-dim
                        transition-colors duration-150"
           >
-            Continue without claude
+            Continue without auth
           </button>
         )}
       </div>
@@ -161,6 +184,82 @@ curl -fsSL https://claude.ai/install.sh | bash`}
   }
 
   return null
+}
+
+function GitHubHeader({ githubStatus }: { githubStatus: GitHubStatus }) {
+  const title =
+    githubStatus.state === 'loading'
+      ? 'Checking GitHub…'
+      : githubStatus.state === 'unauthed'
+        ? 'Connect your GitHub'
+        : githubStatus.state === 'error'
+          ? 'GitHub connection failed'
+          : 'GitHub connected'
+
+  const tone =
+    githubStatus.state === 'loading'
+      ? 'bg-ink-400 dark:bg-chalk-subtle animate-pulse'
+      : githubStatus.state === 'ok'
+        ? 'bg-ink-900 dark:bg-chalk'
+        : githubStatus.state === 'unauthed'
+          ? 'bg-ink-700 dark:bg-chalk-dim'
+          : 'bg-state-failed'
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <span className={clsx('w-2 h-2 rounded-full', tone)} />
+      <h1
+        className="font-display font-semibold text-[28px] tracking-tightest
+                   text-ink-900 dark:text-chalk text-center"
+      >
+        {title}
+      </h1>
+    </div>
+  )
+}
+
+function GitHubBody({
+  status,
+  onConnect,
+  onRetry,
+}: {
+  status: GitHubStatus
+  onConnect: () => void
+  onRetry: () => void
+}) {
+  if (status.state === 'loading') {
+    return (
+      <p className="text-[13px] text-ink-500 dark:text-chalk-dim text-center">
+        Reading stored GitHub session…
+      </p>
+    )
+  }
+  if (status.state === 'error') {
+    return (
+      <div className="flex flex-col items-center gap-5 w-full">
+        <p className="text-[13px] text-state-failed text-center">{status.message}</p>
+        <PrimaryButton onClick={onRetry}>Try again</PrimaryButton>
+      </div>
+    )
+  }
+  // unauthed
+  return (
+    <div className="flex flex-col items-center gap-5 w-full">
+      <p className="text-[13px] text-ink-700 dark:text-chalk-dim text-center leading-relaxed">
+        Agent Farm needs to clone your private repos and identify you.
+        <br />
+        We use GitHub Device Flow — same as the <span className="font-mono">gh</span> CLI.
+      </p>
+      <div className="flex items-center justify-center gap-3">
+        <PrimaryButton onClick={onConnect}>Connect GitHub</PrimaryButton>
+      </div>
+      <p className="text-[11px] text-ink-400 dark:text-chalk-subtle text-center max-w-[440px]">
+        We request <span className="font-mono">repo</span> and{' '}
+        <span className="font-mono">read:user</span>. Tokens stay on your machine,
+        encrypted via macOS Keychain.
+      </p>
+    </div>
+  )
 }
 
 function PrimaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {

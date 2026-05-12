@@ -22,6 +22,13 @@ import {
   writePty,
 } from './pty'
 import { killAgent, killAgentsForWebContents, spawnAgent } from './agent-runner'
+import {
+  currentStatus as githubCurrentStatus,
+  hydrateOnBoot as hydrateGitHub,
+  pollForToken as githubPollForToken,
+  signOut as githubSignOut,
+  startDeviceFlow as githubStartDeviceFlow,
+} from './github-auth'
 import type { AgentSpawnOptions, ProjectCloneOptions } from '../shared/ipc'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -174,6 +181,16 @@ function registerIpc(): void {
   ipcMain.handle(IPC.ProjectClone, async (_e, opts: ProjectCloneOptions) => {
     return cloneProject(opts)
   })
+
+  ipcMain.handle(IPC.GitHubStatus, async () => githubCurrentStatus())
+  ipcMain.handle(IPC.GitHubStartFlow, async () => githubStartDeviceFlow())
+  ipcMain.handle(IPC.GitHubPollForToken, async (_e, deviceCode: string, interval: number) => {
+    if (typeof deviceCode !== 'string' || !Number.isFinite(interval)) {
+      return { ok: false as const, reason: 'invalid arguments' }
+    }
+    return githubPollForToken(deviceCode, interval)
+  })
+  ipcMain.handle(IPC.GitHubSignOut, async () => githubSignOut())
 }
 
 app.whenReady().then(async () => {
@@ -184,6 +201,7 @@ app.whenReady().then(async () => {
   }
 
   registerIpc()
+  await hydrateGitHub()
   await logger.info('app ready', { version: app.getVersion(), platform: process.platform })
   createWindow()
 

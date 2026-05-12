@@ -10,6 +10,9 @@ import {
   type FsListOptions,
   type FsListResult,
   type GitDiffResult,
+  type GitHubPollResult,
+  type GitHubStartFlowResult,
+  type GitHubStatus,
   type LogPayload,
   type ProjectCloneOptions,
   type ProjectCloneResult,
@@ -58,6 +61,20 @@ const api: AgentFarmApi = {
 
   claude: {
     detect: (): Promise<ClaudeStatus> => ipcRenderer.invoke(IPC.ClaudeDetect),
+  },
+
+  github: {
+    status: (): Promise<GitHubStatus> => ipcRenderer.invoke(IPC.GitHubStatus),
+    onStatus: (cb: (s: GitHubStatus) => void): (() => void) => {
+      const listener = (_e: IpcRendererEvent, payload: GitHubStatus) => cb(payload)
+      ipcRenderer.on(IPC.GitHubStatusEvent, listener)
+      return () => ipcRenderer.removeListener(IPC.GitHubStatusEvent, listener)
+    },
+    startDeviceFlow: (): Promise<GitHubStartFlowResult> =>
+      ipcRenderer.invoke(IPC.GitHubStartFlow),
+    pollForToken: (deviceCode: string, intervalSeconds: number): Promise<GitHubPollResult> =>
+      ipcRenderer.invoke(IPC.GitHubPollForToken, deviceCode, intervalSeconds),
+    signOut: (): Promise<void> => ipcRenderer.invoke(IPC.GitHubSignOut),
   },
 
   fs: {

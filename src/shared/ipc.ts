@@ -63,6 +63,46 @@ export type ClaudeStatus =
   | { state: 'missing'; checkedPaths: string[] }
   | { state: 'error'; message: string }
 
+// ── GitHub auth (Device Flow) ────────────────────────────────────────
+
+/** Public-facing account info shown in the title bar + onboarding. The
+ *  access token NEVER leaves main — renderer only ever sees these fields. */
+export interface GitHubAccount {
+  /** GitHub login handle, e.g. "vrajpatel". */
+  login: string
+  /** Display name from GitHub profile. May be null if user didn't set one. */
+  name: string | null
+  /** Avatar URL from GitHub. May be null in theory; usually present. */
+  avatarUrl: string | null
+}
+
+export type GitHubStatus =
+  | { state: 'loading' }
+  | { state: 'unauthed' }
+  | { state: 'ok'; account: GitHubAccount }
+  | { state: 'error'; message: string }
+
+/** Result of the initial POST /login/device/code. The renderer renders
+ *  `userCode` for the user and opens `verificationUri` in the browser. */
+export interface GitHubDeviceFlowStart {
+  userCode: string
+  verificationUri: string
+  /** Internal handle; renderer just passes it back to pollForToken. */
+  deviceCode: string
+  /** Polling interval in seconds (set by GitHub; usually 5). */
+  interval: number
+  /** Seconds until `deviceCode` expires (set by GitHub; usually 900). */
+  expiresIn: number
+}
+
+export type GitHubStartFlowResult =
+  | { ok: true; flow: GitHubDeviceFlowStart }
+  | { ok: false; reason: string }
+
+export type GitHubPollResult =
+  | { ok: true; account: GitHubAccount }
+  | { ok: false; reason: string }
+
 // ── External links ───────────────────────────────────────────────────
 
 /** Hosts we allow `shell.openExternal` to navigate to. Defense in depth. */
@@ -220,6 +260,12 @@ export const IPC = {
   ProjectRecentList: 'project:recent:list',
   ProjectRecentForget: 'project:recent:forget',
   ClaudeDetect: 'claude:detect',
+  GitHubStatus: 'github:status',
+  GitHubStartFlow: 'github:start-flow',
+  GitHubPollForToken: 'github:poll-for-token',
+  GitHubSignOut: 'github:sign-out',
+  /** Event channel (main → renderer) — emits GitHubStatus updates. */
+  GitHubStatusEvent: 'github:status-event',
   OpenExternal: 'shell:open-external',
   RevealInFinder: 'shell:reveal',
   FsList: 'fs:list',
@@ -280,6 +326,19 @@ export interface AgentFarmApi {
 
   claude: {
     detect(): Promise<ClaudeStatus>
+  }
+
+  github: {
+    /** One-shot read of current status (uses cached account from settings). */
+    status(): Promise<GitHubStatus>
+    /** Subscribe to status changes (sign-in / sign-out events). */
+    onStatus(cb: (s: GitHubStatus) => void): () => void
+    /** Begin Device Flow: returns the code the user must enter on github.com. */
+    startDeviceFlow(): Promise<GitHubStartFlowResult>
+    /** Poll until the user approves (or until expired/denied). Long-lived. */
+    pollForToken(deviceCode: string, intervalSeconds: number): Promise<GitHubPollResult>
+    /** Clear stored token + account. */
+    signOut(): Promise<void>
   }
 
   fs: {
