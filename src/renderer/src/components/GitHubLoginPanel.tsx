@@ -21,6 +21,9 @@ type FlowState =
 export function GitHubLoginPanel({ onClose, onSuccess }: GitHubLoginPanelProps) {
   const [state, setState] = useState<FlowState>({ kind: 'idle' })
   const [copied, setCopied] = useState(false)
+  /** Set after the user clicks "Open GitHub & enter code" — flips the
+   *  status line from "Open GitHub" to "Waiting for confirmation…". */
+  const [opened, setOpened] = useState(false)
   // Track whether a poll is in flight so a fast remount doesn't double-poll.
   const polling = useRef(false)
 
@@ -96,6 +99,7 @@ export function GitHubLoginPanel({ onClose, onSuccess }: GitHubLoginPanelProps) 
   const handleOpenVerify = () => {
     if (state.kind !== 'awaiting') return
     void window.agentFarm?.openExternal(state.flow.verificationUri)
+    setOpened(true)
   }
 
   return (
@@ -193,7 +197,9 @@ export function GitHubLoginPanel({ onClose, onSuccess }: GitHubLoginPanelProps) 
             </button>
 
             <p className="font-mono text-[11px] text-ink-400 dark:text-chalk-subtle">
-              Code expires in {formatCountdown(state.secondsLeft)}. Polling…
+              {opened
+                ? 'Waiting for GitHub to confirm your authorization…'
+                : `Code expires in ${formatCountdown(state.secondsLeft)} · polling every ${state.flow.interval}s`}
             </p>
           </div>
         ) : state.kind === 'success' ? (

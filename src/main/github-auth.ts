@@ -147,7 +147,9 @@ interface AccessTokenResponse {
 }
 
 /** Long-lived call. Polls every `intervalSeconds`. Resolves once the user
- *  approves (returns ok+account) or once the flow ends (expired/denied). */
+ *  approves (returns ok+account) or once the flow ends (expired/denied).
+ *  First poll fires at 1.5s instead of the full interval so the panel
+ *  dismisses quickly after the user approves in the browser. */
 export async function pollForToken(
   deviceCode: string,
   intervalSeconds: number,
@@ -156,6 +158,7 @@ export async function pollForToken(
     return { ok: false, reason: 'invalid device code' }
   }
   let interval = Math.max(1, Math.floor(intervalSeconds))
+  let firstPoll = true
 
   // Hard cap on poll time: GitHub device codes expire after 15min, but we
   // also bail if something goes badly wrong (e.g. infinite slow_down).
@@ -166,7 +169,11 @@ export async function pollForToken(
     if (Date.now() > deadline) {
       return { ok: false, reason: 'timeout' }
     }
-    await sleep(interval * 1000)
+    // First iteration: short wait so a fast user sees near-instant dismiss.
+    // GitHub will respond with `slow_down` if we're too fast, which we
+    // handle below — worst case we add 5s once and recover.
+    await sleep(firstPoll ? 1500 : interval * 1000)
+    firstPoll = false
     let body: AccessTokenResponse
     try {
       const res = await fetch(ACCESS_TOKEN_URL, {
