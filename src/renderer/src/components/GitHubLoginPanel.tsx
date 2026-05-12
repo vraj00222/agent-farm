@@ -35,18 +35,36 @@ export function GitHubLoginPanel({ onClose, onSuccess, externalStatus }: GitHubL
   const [hint, setHint] = useState<string | null>(null)
   // Track whether a poll is in flight so a fast remount doesn't double-poll.
   const polling = useRef(false)
+  /** Synchronous guard against React 18 StrictMode running this effect
+   *  twice in dev. Without it, we mint two device_codes (the second is
+   *  displayed) but the polling loop stays attached to the first, so the
+   *  user authorizes the displayed code but our poller never sees the
+   *  token. Set BEFORE any await so the second pass sees true. */
+  const startRunning = useRef(false)
 
   const start = async () => {
+    // CRITICAL: this synchronous check runs before any await, so React 18
+    // StrictMode's double-effect-invocation in dev can't double-start the
+    // flow. Reset is intentionally absent — the panel unmounts when done.
+    if (startRunning.current) return
+    startRunning.current = true
+
     const api = window.agentFarm
-    if (!api) return
+    if (!api) {
+      startRunning.current = false
+      return
+    }
     setState({ kind: 'starting' })
     const res = await api.github.startDeviceFlow()
     if (!res.ok) {
       setState({ kind: 'error', message: res.reason })
+      startRunning.current = false
       return
     }
     setState({ kind: 'awaiting', flow: res.flow, secondsLeft: res.flow.expiresIn })
-    void api.openExternal(res.flow.verificationUri)
+    // Do NOT auto-open the browser here — that's tied to the explicit
+    // "Open GitHub & enter code" button. Auto-open would re-trigger every
+    // StrictMode remount and confuse the user.
     if (polling.current) return
     polling.current = true
     try {
@@ -253,23 +271,21 @@ export function GitHubLoginPanel({ onClose, onSuccess, externalStatus }: GitHubL
               >
                 Open GitHub & enter code
               </button>
-              {opened && (
-                <button
-                  type="button"
-                  disabled={checking}
-                  onClick={() => void handleCheckNow()}
-                  className="no-drag inline-flex items-center gap-2 px-3 py-2 rounded-md
-                             border border-line dark:border-line-dark
-                             text-ink-700 dark:text-chalk-dim
-                             hover:border-ink-500 dark:hover:border-chalk-dim
-                             hover:text-ink-900 dark:hover:text-chalk
-                             transition-all duration-150
-                             font-display text-[12px]
-                             disabled:opacity-60 cursor-pointer"
-                >
-                  {checking ? 'Checking…' : 'I just authorized — check now'}
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={checking}
+                onClick={() => void handleCheckNow()}
+                className="no-drag inline-flex items-center gap-2 px-3 py-2 rounded-md
+                           border border-line dark:border-line-dark
+                           text-ink-700 dark:text-chalk-dim
+                           hover:border-ink-500 dark:hover:border-chalk-dim
+                           hover:text-ink-900 dark:hover:text-chalk
+                           transition-all duration-150
+                           font-display text-[12px]
+                           disabled:opacity-60 cursor-pointer"
+              >
+                {checking ? 'Checking…' : 'I just authorized — check now'}
+              </button>
             </div>
 
             <p className="font-mono text-[11px] text-ink-400 dark:text-chalk-subtle">
