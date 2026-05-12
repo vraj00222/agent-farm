@@ -30,6 +30,9 @@ export function GitHubLoginPanel({ onClose, onSuccess, externalStatus }: GitHubL
    *  status line from "Open GitHub" to "Waiting for confirmation…". */
   const [opened, setOpened] = useState(false)
   const [checking, setChecking] = useState(false)
+  /** Last check-now result message, surfaced under the buttons. Cleared
+   *  when the user takes any further action. */
+  const [hint, setHint] = useState<string | null>(null)
   // Track whether a poll is in flight so a fast remount doesn't double-poll.
   const polling = useRef(false)
 
@@ -111,21 +114,36 @@ export function GitHubLoginPanel({ onClose, onSuccess, externalStatus }: GitHubL
   const handleCheckNow = async () => {
     if (state.kind !== 'awaiting' || checking) return
     setChecking(true)
+    setHint(null)
     try {
-      const res = await window.agentFarm?.github.checkOnce(state.flow.deviceCode)
-      if (res?.ok) {
+      const api = window.agentFarm
+      if (!api) {
+        setHint('IPC bridge unavailable — relaunch the app.')
+        return
+      }
+      const res = await api.github.checkOnce(state.flow.deviceCode)
+      if (res.ok) {
         setState({ kind: 'success' })
         setTimeout(onSuccess, 1000)
-      } else if (res) {
-        // Don't kick out of awaiting — show a transient hint and keep polling.
-        // Common reason: "still waiting — keep the browser tab open and approve".
-        setState((prev) => prev.kind === 'awaiting' ? prev : prev)
-        // Surface the reason in the countdown line by appending it briefly.
-        // Cheapest UX is a window alert; nicer is reusing the status text.
-        // For now, log to the renderer console so we can diagnose.
-        // eslint-disable-next-line no-console
-        console.warn('[github checkOnce]', res.reason)
+        return
       }
+      // Stay in awaiting state; show the reason so the user knows what happened.
+      setHint(res.reason)
+      // eslint-disable-next-line no-console
+      console.warn('[github checkOnce]', res.reason)
+    } catch (err) {
+      // The most common failure here is "No handler registered for
+      // 'github:check-once'" — happens if the main process is still the
+      // old build because electron-vite didn't auto-restart on the main
+      // file change. Surface clearly so the user knows to relaunch.
+      const message = err instanceof Error ? err.message : String(err)
+      setHint(
+        message.includes('No handler')
+          ? 'Main process is stale — Cmd+Q and `npm run dev` to reload it.'
+          : `Check failed: ${message}`,
+      )
+      // eslint-disable-next-line no-console
+      console.error('[github checkOnce] threw', err)
     } finally {
       setChecking(false)
     }
@@ -259,6 +277,14 @@ export function GitHubLoginPanel({ onClose, onSuccess, externalStatus }: GitHubL
                 ? 'Waiting for GitHub to confirm your authorization…'
                 : `Code expires in ${formatCountdown(state.secondsLeft)} · polling every ${state.flow.interval}s`}
             </p>
+            {hint && (
+              <p
+                className="font-mono text-[11px] text-state-failed text-center max-w-[480px]"
+                role="status"
+              >
+                {hint}
+              </p>
+            )}
           </div>
         ) : state.kind === 'success' ? (
           <p className="text-[14px] font-display font-semibold text-ink-900 dark:text-chalk">
