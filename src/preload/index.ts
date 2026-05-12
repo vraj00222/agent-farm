@@ -61,6 +61,7 @@ const api: AgentFarmApi = {
 
   claude: {
     detect: (): Promise<ClaudeStatus> => ipcRenderer.invoke(IPC.ClaudeDetect),
+    openLoginInTerminal: () => ipcRenderer.invoke(IPC.ClaudeOpenLoginInTerminal),
   },
 
   github: {

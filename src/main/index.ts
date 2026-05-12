@@ -11,6 +11,7 @@ import { logger } from './logger'
 import { forgetProject, listRecentProjects } from './settings'
 import { cloneProject, inspectPath, openProjectDialog } from './project'
 import { detectClaude } from './claude'
+import { openClaudeLoginInTerminal } from './claude-auth'
 import { listProjectTree } from './fs-list'
 import { getGitDiff } from './git-diff'
 import { runSmoke } from './smoke'
@@ -112,6 +113,8 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IPC.ClaudeDetect, async () => detectClaude())
+
+  ipcMain.handle(IPC.ClaudeOpenLoginInTerminal, async () => openClaudeLoginInTerminal())
 
   ipcMain.handle(IPC.OpenExternal, async (_e, url: string) => {
     if (typeof url !== 'string' || !isAllowedExternal(url)) {

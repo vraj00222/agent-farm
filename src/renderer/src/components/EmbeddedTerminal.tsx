@@ -16,6 +16,10 @@ interface EmbeddedTerminalProps {
   initialInput?: string
   /** Delay before sending initialInput. Default 600ms. */
   initialInputDelayMs?: number
+  /** Observe raw output chunks from the pty. Receives the same data the
+   *  terminal renders. Use for sentinel detection (e.g. wait for prompt,
+   *  detect OAuth URL, detect login-success). */
+  onOutput?: (chunk: string) => void
   className?: string
 }
 
@@ -33,8 +37,15 @@ export function EmbeddedTerminal({
   onSession,
   initialInput,
   initialInputDelayMs = 600,
+  onOutput,
   className,
 }: EmbeddedTerminalProps) {
+  // Keep the latest onOutput reference without re-mounting the terminal
+  // whenever the parent re-renders with a new closure.
+  const onOutputRef = useRef(onOutput)
+  useEffect(() => {
+    onOutputRef.current = onOutput
+  }, [onOutput])
   const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -128,7 +139,9 @@ export function EmbeddedTerminal({
       onSession?.(sessionId)
 
       unsubData = api.pty.onData((e) => {
-        if (e.sessionId === sessionId) term.write(e.data)
+        if (e.sessionId !== sessionId) return
+        term.write(e.data)
+        onOutputRef.current?.(e.data)
       })
       unsubExit = api.pty.onExit((e) => {
         if (e.sessionId === sessionId) onExit?.(e.exitCode, e.signal)

@@ -12,6 +12,7 @@ import type {
 import { logger } from './logger'
 import { rememberProject } from './settings'
 import { trustProjectForClaude } from './claude-trust'
+import { getCurrentToken as getGitHubToken } from './github-auth'
 
 const exec = promisify(execFile)
 
@@ -134,6 +135,29 @@ function repoNameFromUrl(url: string): string {
   return last || 'project'
 }
 
+/** True if the URL is an https://github.com/... URL we can auth via token. */
+function shouldAuth(url: string): boolean {
+  return /^https:\/\/github\.com\//i.test(url)
+}
+
+/** Build the git clone argv. For github.com https URLs with a token in hand,
+ *  inject an `extraheader` via -c so the auth header is sent on the clone
+ *  HTTPS request but never persisted into the cloned repo's .git/config. */
+function buildCloneArgs(url: string, target: string): string[] {
+  if (!shouldAuth(url)) return ['clone', '--', url, target]
+  const token = getGitHubToken()
+  if (!token) return ['clone', '--', url, target]
+  const basic = Buffer.from(`x-access-token:${token}`).toString('base64')
+  return [
+    '-c',
+    `http.https://github.com/.extraheader=Authorization: Basic ${basic}`,
+    'clone',
+    '--',
+    url,
+    target,
+  ]
+}
+
 export async function cloneProject(opts: ProjectCloneOptions): Promise<ProjectCloneResult> {
   if (!opts.url || !opts.parentPath) {
     return { ok: false, reason: 'url and parentPath are required' }
@@ -162,8 +186,9 @@ export async function cloneProject(opts: ProjectCloneOptions): Promise<ProjectCl
       return { ok: false, reason: `target already exists: ${target}` }
     }
 
-    await logger.info('clone start', { url, target })
-    await exec('git', ['clone', '--', url, target], {
+    await logger.info('clone start', { url, target, authed: shouldAuth(url) })
+    const args = buildCloneArgs(url, target)
+    await exec('git', args, {
       cwd: opts.parentPath,
       timeout: 120_000,
     })

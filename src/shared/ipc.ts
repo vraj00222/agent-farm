@@ -260,6 +260,7 @@ export const IPC = {
   ProjectRecentList: 'project:recent:list',
   ProjectRecentForget: 'project:recent:forget',
   ClaudeDetect: 'claude:detect',
+  ClaudeOpenLoginInTerminal: 'claude:open-login-in-terminal',
   GitHubStatus: 'github:status',
   GitHubStartFlow: 'github:start-flow',
   GitHubPollForToken: 'github:poll-for-token',
@@ -326,6 +327,9 @@ export interface AgentFarmApi {
 
   claude: {
     detect(): Promise<ClaudeStatus>
+    /** Escape hatch when the embedded login flow hangs. On macOS, opens
+     *  Terminal.app and runs `claude /login`. Returns ok+pid or a reason. */
+    openLoginInTerminal(): Promise<{ ok: boolean; reason?: string }>
   }
 
   github: {

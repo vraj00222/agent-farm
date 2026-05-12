@@ -348,6 +348,7 @@ export function App() {
           rightPanelOpen={null}
           onTogglePanel={null}
           account={undefined}
+          githubAccount={undefined}
         />
         <main className="flex-1 overflow-hidden">
           <Onboarding
@@ -404,6 +405,7 @@ export function App() {
           rightPanelOpen={activeTab ? rightPanelOpen : null}
           onTogglePanel={activeTab ? toggleRightPanel : null}
           account={claudeAccount}
+          githubAccount={githubStatus.state === 'ok' ? githubStatus.account : undefined}
         />
 
         {projects.length > 0 && (
@@ -494,11 +496,13 @@ function AppTitleBar({
   rightPanelOpen,
   onTogglePanel,
   account,
+  githubAccount,
 }: {
   onSignInAgain: (() => void) | null
   rightPanelOpen: boolean | null
   onTogglePanel: (() => void) | null
   account: import('../../shared/ipc').ClaudeAccount | undefined
+  githubAccount: import('../../shared/ipc').GitHubAccount | undefined
 }) {
   return (
     <header
@@ -517,6 +521,7 @@ function AppTitleBar({
           </span>
         </div>
         {account && <AccountChip account={account} />}
+        {githubAccount && <GitHubChip account={githubAccount} />}
       </div>
       <div className="flex items-center gap-2">
         {onSignInAgain && (
@@ -612,6 +617,31 @@ function AccountChip({
           {tier}
         </span>
       )}
+    </span>
+  )
+}
+
+/** "@vrajpatel · GitHub" chip. Sits next to the Claude chip when both are
+ *  signed in. Avatar is omitted in v1 — the brand stays text-first. */
+function GitHubChip({
+  account,
+}: {
+  account: import('../../shared/ipc').GitHubAccount
+}) {
+  return (
+    <span
+      className="no-drag inline-flex items-baseline gap-1.5 px-2 py-0.5 rounded
+                 border border-line dark:border-line-dark
+                 bg-bone-sunk dark:bg-coal-sunk"
+      title={account.name ? `${account.name} (@${account.login}) · GitHub` : `@${account.login} · GitHub`}
+      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+    >
+      <span className="font-display font-semibold text-[11px] text-ink-900 dark:text-chalk">
+        @{account.login}
+      </span>
+      <span className="font-mono text-[9.5px] uppercase tracking-cap text-ink-500 dark:text-chalk-dim">
+        GitHub
+      </span>
     </span>
   )
 }
