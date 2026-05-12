@@ -6,8 +6,9 @@ interface GitHubLoginPanelProps {
   onSuccess: () => void
   /** Latest status pushed from main via the github:status event. If it
    *  flips to 'ok' while we're awaiting, the panel auto-dismisses
-   *  regardless of what our local poll Promise is doing. */
-  externalStatus: import('../../../shared/ipc').GitHubStatus
+   *  regardless of what our local poll Promise is doing. Optional so
+   *  React HMR's transient mounts with stale props don't crash. */
+  externalStatus?: import('../../../shared/ipc').GitHubStatus
 }
 
 type FlowState =
@@ -132,12 +133,13 @@ export function GitHubLoginPanel({ onClose, onSuccess, externalStatus }: GitHubL
 
   // Belt-and-braces: dismiss the panel the moment github-auth broadcasts ok,
   // even if our local poll Promise is still pending (e.g. mid-interval sleep).
+  const externalState = externalStatus?.state
   useEffect(() => {
-    if (externalStatus.state === 'ok' && state.kind !== 'success') {
+    if (externalState === 'ok' && state.kind !== 'success') {
       setState({ kind: 'success' })
       setTimeout(onSuccess, 600)
     }
-  }, [externalStatus.state, state.kind, onSuccess])
+  }, [externalState, state.kind, onSuccess])
 
   return (
     <div
