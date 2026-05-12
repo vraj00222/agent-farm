@@ -3,7 +3,7 @@ import { promisify } from 'node:util'
 import { promises as fs } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { ClaudeStatus } from '../shared/ipc'
+import type { ClaudeAccount, ClaudeStatus } from '../shared/ipc'
 import { logger } from './logger'
 
 const exec = promisify(execFile)
@@ -122,6 +122,43 @@ async function isAuthed(_binary: string): Promise<boolean> {
   return false
 }
 
+/**
+ * Best-effort read of the user's account info from `~/.claude.json`. The
+ * file is owned by claude itself — schema can change between versions, so we
+ * pull only the few fields we want and tolerate them missing.
+ */
+async function readAccount(): Promise<ClaudeAccount | undefined> {
+  const path = join(homedir(), '.claude.json')
+  let raw: string
+  try {
+    raw = await fs.readFile(path, 'utf8')
+  } catch {
+    return undefined
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return undefined
+  }
+  if (!parsed || typeof parsed !== 'object') return undefined
+  const root = parsed as Record<string, unknown>
+  const acct = root['oauthAccount']
+  if (!acct || typeof acct !== 'object') return undefined
+  const a = acct as Record<string, unknown>
+  const pick = (k: string): string | undefined => {
+    const v = a[k]
+    return typeof v === 'string' && v.length > 0 ? v : undefined
+  }
+  return {
+    displayName: pick('displayName'),
+    emailAddress: pick('emailAddress'),
+    seatTier: pick('seatTier'),
+    organizationName: pick('organizationName'),
+    billingType: pick('billingType'),
+  }
+}
+
 export async function detectClaude(): Promise<ClaudeStatus> {
   const found = await findBinary()
   if (!found.path) {
@@ -138,5 +175,6 @@ export async function detectClaude(): Promise<ClaudeStatus> {
   const authed = await isAuthed(found.path)
   await logger.info('claude detected', { path: found.path, version, authed })
   if (!authed) return { state: 'unauthed', binaryPath: found.path, version }
-  return { state: 'ok', binaryPath: found.path, version, authed: true }
+  const account = await readAccount()
+  return { state: 'ok', binaryPath: found.path, version, authed: true, account }
 }

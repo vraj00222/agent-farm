@@ -126,6 +126,8 @@ export function App() {
     claudeStatus !== 'loading' && 'binaryPath' in claudeStatus
       ? claudeStatus.binaryPath
       : null
+  const claudeAccount =
+    claudeStatus !== 'loading' && claudeStatus.state === 'ok' ? claudeStatus.account : undefined
 
   // ── Project open / close / focus ──────────────────────────────────────
 
@@ -315,6 +317,7 @@ export function App() {
           onSignInAgain={null}
           rightPanelOpen={null}
           onTogglePanel={null}
+          account={undefined}
         />
         <main className="flex-1 overflow-hidden">
           <Onboarding
@@ -358,6 +361,7 @@ export function App() {
           onSignInAgain={claudeIsOk ? handleOpenSignIn : null}
           rightPanelOpen={activeTab ? rightPanelOpen : null}
           onTogglePanel={activeTab ? toggleRightPanel : null}
+          account={claudeAccount}
         />
 
         {projects.length > 0 && (
@@ -438,10 +442,12 @@ function AppTitleBar({
   onSignInAgain,
   rightPanelOpen,
   onTogglePanel,
+  account,
 }: {
   onSignInAgain: (() => void) | null
   rightPanelOpen: boolean | null
   onTogglePanel: (() => void) | null
+  account: import('../../shared/ipc').ClaudeAccount | undefined
 }) {
   return (
     <header
@@ -450,13 +456,16 @@ function AppTitleBar({
                  border-b border-line dark:border-line-dark px-4"
       style={{ height: 'var(--titlebar-h)', paddingLeft: 90 }}
     >
-      <div className="flex items-baseline gap-2">
-        <span className="font-display font-semibold text-[13px] tracking-tightest text-ink-900 dark:text-chalk">
-          Agent Farm
-        </span>
-        <span className="font-mono text-[10.5px] text-ink-400 dark:text-chalk-subtle">
-          v{__APP_VERSION__}
-        </span>
+      <div className="flex items-baseline gap-3">
+        <div className="flex items-baseline gap-2">
+          <span className="font-display font-semibold text-[13px] tracking-tightest text-ink-900 dark:text-chalk">
+            Agent Farm
+          </span>
+          <span className="font-mono text-[10.5px] text-ink-400 dark:text-chalk-subtle">
+            v{__APP_VERSION__}
+          </span>
+        </div>
+        {account && <AccountChip account={account} />}
       </div>
       <div className="flex items-center gap-2">
         {onSignInAgain && (
@@ -519,6 +528,49 @@ function AppTitleBar({
       </div>
     </header>
   )
+}
+
+/** Small "Vraj Patel · Pro" chip next to the brand. Pulled from
+ *  ~/.claude.json's oauthAccount; nothing else is queried at runtime. */
+function AccountChip({
+  account,
+}: {
+  account: import('../../shared/ipc').ClaudeAccount
+}) {
+  const name =
+    account.displayName ??
+    (account.emailAddress ? account.emailAddress.split('@')[0] : 'claude')
+  const tier = friendlyTier(account.seatTier)
+  return (
+    <span
+      className="no-drag inline-flex items-baseline gap-1.5 px-2 py-0.5 rounded
+                 border border-line dark:border-line-dark
+                 bg-bone-sunk dark:bg-coal-sunk"
+      title={
+        account.emailAddress
+          ? `${account.emailAddress}${account.organizationName ? ' · ' + account.organizationName : ''}`
+          : undefined
+      }
+      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+    >
+      <span className="font-display font-semibold text-[11px] text-ink-900 dark:text-chalk">
+        {name}
+      </span>
+      {tier && (
+        <span className="font-mono text-[9.5px] uppercase tracking-cap text-ink-500 dark:text-chalk-dim">
+          {tier}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function friendlyTier(tier?: string): string | null {
+  if (!tier) return null
+  // claude calls these `seatTier`. Most users see "pro", "max", "team",
+  // "enterprise", "free". Render with first letter capitalised.
+  const lower = tier.toLowerCase()
+  return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
 function SessionView({
@@ -662,7 +714,7 @@ function SessionView({
             projectId={tab.id}
             projectPath={tab.path}
             isGitRepo={tab.isGitRepo}
-            claudeBinary={claudeBinary}
+            shell={window.agentFarm?.shell ?? '/bin/zsh'}
           />
         )}
       </div>

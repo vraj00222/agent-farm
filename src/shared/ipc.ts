@@ -45,8 +45,20 @@ export type ProjectOpenResult =
 
 // ── Claude detection ─────────────────────────────────────────────────
 
+/** Account info read from ~/.claude.json after `claude login`. All fields
+ *  optional — claude may stash partial data depending on flow. */
+export interface ClaudeAccount {
+  /** Display name, e.g. "Vraj Patel". Falls back to local-part of email. */
+  displayName?: string
+  emailAddress?: string
+  /** "pro" | "max" | "team" | "free" — claude calls this `seatTier`. */
+  seatTier?: string
+  organizationName?: string
+  billingType?: string
+}
+
 export type ClaudeStatus =
-  | { state: 'ok'; binaryPath: string; version: string; authed: true }
+  | { state: 'ok'; binaryPath: string; version: string; authed: true; account?: ClaudeAccount }
   | { state: 'unauthed'; binaryPath: string; version: string }
   | { state: 'missing'; checkedPaths: string[] }
   | { state: 'error'; message: string }
@@ -246,6 +258,8 @@ export interface AgentFarmApi {
   arch: string
   /** Absolute path to the user's home directory. Renderer-safe convenience. */
   home: string
+  /** User's login shell (`$SHELL`), falling back to `/bin/zsh` on macOS. */
+  shell: string
   versions: { node: string; chrome: string; electron: string }
 
   project: {

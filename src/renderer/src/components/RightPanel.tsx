@@ -11,9 +11,8 @@ interface RightPanelProps {
   projectId: string
   projectPath: string
   isGitRepo: boolean
-  /** Absolute path to the claude binary (from claude.detect). When null we
-   *  show a small notice in the terminal tab and skip spawning. */
-  claudeBinary: string | null
+  /** User's login shell, surfaced via window.agentFarm.shell. */
+  shell: string
 }
 
 type Tab = 'diff' | 'terminal' | 'files'
@@ -27,7 +26,7 @@ export function RightPanel({
   projectId,
   projectPath,
   isGitRepo,
-  claudeBinary,
+  shell,
 }: RightPanelProps) {
   // Default to Files now that the middle pane is the live claude shell —
   // opening the right panel is more useful for file-tree / diff context.
@@ -45,17 +44,7 @@ export function RightPanel({
           <DiffView projectPath={projectPath} isGitRepo={isGitRepo} />
         </Pane>
         <Pane visible={tab === 'terminal'}>
-          {claudeBinary ? (
-            <TerminalPane
-              projectId={projectId}
-              projectPath={projectPath}
-              claudeBinary={claudeBinary}
-            />
-          ) : (
-            <div className="p-3 font-mono text-[11px] text-ink-400 dark:text-chalk-subtle">
-              claude isn’t detected yet — sign in from the title bar first.
-            </div>
-          )}
+          <TerminalPane projectId={projectId} projectPath={projectPath} shell={shell} />
         </Pane>
         <Pane visible={tab === 'files'}>
           <FilesView projectPath={projectPath} />
@@ -140,36 +129,29 @@ function TabButton({
 }
 
 /**
- * The terminal tab — its own component so its props are stable across tab
- * switches. The EmbeddedTerminal mounts on first render and lives until the
- * whole RightPanel unmounts (i.e. you close the project tab).
+ * Plain shell terminal — the user's `$SHELL` (zsh / bash), NOT claude. The
+ * claude REPL already lives in the middle pane; this side terminal is for
+ * regular bash commands (`ls`, `git log`, `npm test`, …) while you watch
+ * claude work.
  */
 function TerminalPane({
   projectId,
   projectPath,
-  claudeBinary,
+  shell,
 }: {
   projectId: string
   projectPath: string
-  claudeBinary: string
+  shell: string
 }) {
   return (
     <div className="h-full w-full p-2">
       <EmbeddedTerminal
         key={projectId}
         spawn={{
-          // --dangerously-skip-permissions bypasses the per-folder trust
-          // prompt + tool permission ladder.
-          // --setting-sources project,local tells claude to skip
-          // ~/.claude/settings.json. If the user's global settings file
-          // has malformed permissions entries claude refuses to silently
-          // ignore them — so we just don't load that source at all here.
-          command: claudeBinary,
-          args: [
-            '--dangerously-skip-permissions',
-            '--setting-sources',
-            'project,local',
-          ],
+          command: shell,
+          // -l = login shell so the user's profile/.zshrc loads. -i would
+          // also work but -l gives the closer-to-Terminal.app experience.
+          args: ['-l'],
           cwd: projectPath,
           cols: 80,
           rows: 24,

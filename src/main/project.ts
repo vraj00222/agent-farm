@@ -11,6 +11,7 @@ import type {
 } from '../shared/ipc'
 import { logger } from './logger'
 import { rememberProject } from './settings'
+import { trustProjectForClaude } from './claude-trust'
 
 const exec = promisify(execFile)
 
@@ -109,6 +110,9 @@ export async function inspectPath(path: string): Promise<ProjectOpenResult> {
   }
 
   await rememberProject({ path: info.path, repoName: info.repoName })
+  // Mark the project root as trusted in ~/.claude.json so claude doesn't
+  // show the per-folder trust dialog when we spawn it here. Best-effort.
+  void trustProjectForClaude(info.path)
   await logger.info('open_project ok', {
     path: info.path,
     isGitRepo,

@@ -25,6 +25,7 @@ const api: AgentFarmApi = {
   platform: process.platform,
   arch: process.arch,
   home: homedir(),
+  shell: process.env.SHELL || (process.platform === 'win32' ? 'cmd.exe' : '/bin/zsh'),
   versions: {
     node: process.versions.node ?? '',
     chrome: process.versions.chrome ?? '',

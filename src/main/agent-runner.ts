@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { BrowserWindow } from 'electron'
 import { logger } from './logger'
 import { createWorktree, removeWorktree } from './worktree'
+import { trustProjectForClaude } from './claude-trust'
 import { IPC, type AgentEvent, type AgentSpawnOptions, type AgentSpawnResult } from '../shared/ipc'
 
 const exec = promisify(execFile)
@@ -96,6 +97,11 @@ export async function spawnAgent(
   if (!wt.ok) {
     return { ok: false, reason: `worktree: ${wt.reason}` }
   }
+
+  // 2a. Mark the worktree path as trusted so claude doesn't gate on the
+  //     "Do you trust the files in this folder?" dialog. Best-effort; the
+  //     --dangerously-skip-permissions flag covers us if this fails.
+  await trustProjectForClaude(wt.worktreePath)
 
   // 3. Build the claude command. `-p` (print mode) is non-interactive,
   //    streams to stdout then exits.
