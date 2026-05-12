@@ -75,6 +75,8 @@ const api: AgentFarmApi = {
       ipcRenderer.invoke(IPC.GitHubStartFlow),
     pollForToken: (deviceCode: string, intervalSeconds: number): Promise<GitHubPollResult> =>
       ipcRenderer.invoke(IPC.GitHubPollForToken, deviceCode, intervalSeconds),
+    checkOnce: (deviceCode: string): Promise<GitHubPollResult> =>
+      ipcRenderer.invoke(IPC.GitHubCheckOnce, deviceCode),
     signOut: (): Promise<void> => ipcRenderer.invoke(IPC.GitHubSignOut),
   },
 

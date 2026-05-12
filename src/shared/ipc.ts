@@ -264,6 +264,7 @@ export const IPC = {
   GitHubStatus: 'github:status',
   GitHubStartFlow: 'github:start-flow',
   GitHubPollForToken: 'github:poll-for-token',
+  GitHubCheckOnce: 'github:check-once',
   GitHubSignOut: 'github:sign-out',
   /** Event channel (main → renderer) — emits GitHubStatus updates. */
   GitHubStatusEvent: 'github:status-event',
@@ -341,6 +342,9 @@ export interface AgentFarmApi {
     startDeviceFlow(): Promise<GitHubStartFlowResult>
     /** Poll until the user approves (or until expired/denied). Long-lived. */
     pollForToken(deviceCode: string, intervalSeconds: number): Promise<GitHubPollResult>
+    /** Single immediate poll. Powers the panel's "Check now" button when the
+     *  long-running poll's timer hasn't fired yet. */
+    checkOnce(deviceCode: string): Promise<GitHubPollResult>
     /** Clear stored token + account. */
     signOut(): Promise<void>
   }

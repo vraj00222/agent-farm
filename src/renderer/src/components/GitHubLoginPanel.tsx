@@ -4,6 +4,10 @@ import type { GitHubDeviceFlowStart } from '../../../shared/ipc'
 interface GitHubLoginPanelProps {
   onClose: () => void
   onSuccess: () => void
+  /** Latest status pushed from main via the github:status event. If it
+   *  flips to 'ok' while we're awaiting, the panel auto-dismisses
+   *  regardless of what our local poll Promise is doing. */
+  externalStatus: import('../../../shared/ipc').GitHubStatus
 }
 
 type FlowState =
@@ -18,12 +22,13 @@ type FlowState =
  * — bottom slab with title bar and primary action. Shows the 8-char user
  * code with copy button and opens the verification URL.
  */
-export function GitHubLoginPanel({ onClose, onSuccess }: GitHubLoginPanelProps) {
+export function GitHubLoginPanel({ onClose, onSuccess, externalStatus }: GitHubLoginPanelProps) {
   const [state, setState] = useState<FlowState>({ kind: 'idle' })
   const [copied, setCopied] = useState(false)
   /** Set after the user clicks "Open GitHub & enter code" — flips the
    *  status line from "Open GitHub" to "Waiting for confirmation…". */
   const [opened, setOpened] = useState(false)
+  const [checking, setChecking] = useState(false)
   // Track whether a poll is in flight so a fast remount doesn't double-poll.
   const polling = useRef(false)
 
@@ -101,6 +106,38 @@ export function GitHubLoginPanel({ onClose, onSuccess }: GitHubLoginPanelProps) 
     void window.agentFarm?.openExternal(state.flow.verificationUri)
     setOpened(true)
   }
+
+  const handleCheckNow = async () => {
+    if (state.kind !== 'awaiting' || checking) return
+    setChecking(true)
+    try {
+      const res = await window.agentFarm?.github.checkOnce(state.flow.deviceCode)
+      if (res?.ok) {
+        setState({ kind: 'success' })
+        setTimeout(onSuccess, 1000)
+      } else if (res) {
+        // Don't kick out of awaiting — show a transient hint and keep polling.
+        // Common reason: "still waiting — keep the browser tab open and approve".
+        setState((prev) => prev.kind === 'awaiting' ? prev : prev)
+        // Surface the reason in the countdown line by appending it briefly.
+        // Cheapest UX is a window alert; nicer is reusing the status text.
+        // For now, log to the renderer console so we can diagnose.
+        // eslint-disable-next-line no-console
+        console.warn('[github checkOnce]', res.reason)
+      }
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  // Belt-and-braces: dismiss the panel the moment github-auth broadcasts ok,
+  // even if our local poll Promise is still pending (e.g. mid-interval sleep).
+  useEffect(() => {
+    if (externalStatus.state === 'ok' && state.kind !== 'success') {
+      setState({ kind: 'success' })
+      setTimeout(onSuccess, 600)
+    }
+  }, [externalStatus.state, state.kind, onSuccess])
 
   return (
     <div
@@ -181,20 +218,39 @@ export function GitHubLoginPanel({ onClose, onSuccess }: GitHubLoginPanelProps) 
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={handleOpenVerify}
-              className="no-drag inline-flex items-center gap-2 px-4 py-2 rounded-md
-                         border border-ink-900/30 dark:border-chalk/30
-                         hover:border-ink-900 dark:hover:border-chalk
-                         hover:-translate-y-0.5 hover:shadow-sm
-                         active:scale-[0.985] active:translate-y-0
-                         transition-all duration-200 ease-quart-out
-                         font-display font-semibold text-[12.5px]
-                         text-ink-900 dark:text-chalk bg-bone dark:bg-coal cursor-pointer"
-            >
-              Open GitHub & enter code
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleOpenVerify}
+                className="no-drag inline-flex items-center gap-2 px-4 py-2 rounded-md
+                           border border-ink-900/30 dark:border-chalk/30
+                           hover:border-ink-900 dark:hover:border-chalk
+                           hover:-translate-y-0.5 hover:shadow-sm
+                           active:scale-[0.985] active:translate-y-0
+                           transition-all duration-200 ease-quart-out
+                           font-display font-semibold text-[12.5px]
+                           text-ink-900 dark:text-chalk bg-bone dark:bg-coal cursor-pointer"
+              >
+                Open GitHub & enter code
+              </button>
+              {opened && (
+                <button
+                  type="button"
+                  disabled={checking}
+                  onClick={() => void handleCheckNow()}
+                  className="no-drag inline-flex items-center gap-2 px-3 py-2 rounded-md
+                             border border-line dark:border-line-dark
+                             text-ink-700 dark:text-chalk-dim
+                             hover:border-ink-500 dark:hover:border-chalk-dim
+                             hover:text-ink-900 dark:hover:text-chalk
+                             transition-all duration-150
+                             font-display text-[12px]
+                             disabled:opacity-60 cursor-pointer"
+                >
+                  {checking ? 'Checking…' : 'I just authorized — check now'}
+                </button>
+              )}
+            </div>
 
             <p className="font-mono text-[11px] text-ink-400 dark:text-chalk-subtle">
               {opened

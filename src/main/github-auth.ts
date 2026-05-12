@@ -198,20 +198,16 @@ export async function pollForToken(
       continue
     }
 
+    void logger.info('github-auth: poll response', {
+      hasToken: !!body.access_token,
+      error: body.error,
+      errorDescription: body.error_description,
+    })
+
     if (body.access_token) {
-      const account = await fetchUser(body.access_token)
-      if (!account) {
-        return { ok: false, reason: 'fetched token but /user failed' }
-      }
-      const persisted = await persistToken(body.access_token, account)
-      if (!persisted.ok) {
-        return persisted
-      }
-      currentToken = body.access_token
-      currentAccount = account
-      broadcastStatus()
-      void logger.info('github-auth: signed in', { login: account.login })
-      return { ok: true, account }
+      const finalized = await finalizeToken(body.access_token)
+      if (finalized.ok) return finalized
+      return finalized
     }
 
     switch (body.error) {
@@ -231,6 +227,65 @@ export async function pollForToken(
         return { ok: false, reason: body.error_description ?? body.error ?? 'unknown error' }
     }
   }
+}
+
+/** One-shot poll. Powers the "Check now" button. Same request as the loop's
+ *  poll, but with no waiting and no looping — just a single round-trip. */
+export async function checkOnce(deviceCode: string): Promise<GitHubPollResult> {
+  if (typeof deviceCode !== 'string' || deviceCode.length === 0) {
+    return { ok: false, reason: 'invalid device code' }
+  }
+  let body: AccessTokenResponse
+  try {
+    const res = await fetch(ACCESS_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': USER_AGENT,
+      },
+      body: new URLSearchParams({
+        client_id: GITHUB_CLIENT_ID,
+        device_code: deviceCode,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      }).toString(),
+    })
+    body = (await res.json()) as AccessTokenResponse
+    void logger.info('github-auth: checkOnce response', {
+      status: res.status,
+      hasToken: !!body.access_token,
+      error: body.error,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    void logger.error('github-auth: checkOnce fetch failed', { message })
+    return { ok: false, reason: message }
+  }
+  if (body.access_token) {
+    return finalizeToken(body.access_token)
+  }
+  if (body.error === 'authorization_pending') {
+    return { ok: false, reason: 'still waiting — keep the browser tab open and approve' }
+  }
+  if (body.error === 'slow_down') {
+    return { ok: false, reason: 'github asked us to slow down — try again in a few seconds' }
+  }
+  return { ok: false, reason: body.error_description ?? body.error ?? 'unknown error' }
+}
+
+/** Shared finalize path: token → /user → encrypt → persist → broadcast. */
+async function finalizeToken(token: string): Promise<GitHubPollResult> {
+  const account = await fetchUser(token)
+  if (!account) {
+    return { ok: false, reason: 'fetched token but /user failed' }
+  }
+  const persisted = await persistToken(token, account)
+  if (!persisted.ok) return persisted
+  currentToken = token
+  currentAccount = account
+  broadcastStatus()
+  void logger.info('github-auth: signed in', { login: account.login })
+  return { ok: true, account }
 }
 
 // ── Identify the user ────────────────────────────────────────────────

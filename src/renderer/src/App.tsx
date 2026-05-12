@@ -386,6 +386,7 @@ export function App() {
         )}
         {githubFlowOpen && (
           <GitHubLoginPanel
+            externalStatus={githubStatus}
             onClose={() => setGitHubFlowOpen(false)}
             onSuccess={() => {
               setGitHubFlowOpen(false)
@@ -464,6 +465,7 @@ export function App() {
         )}
         {githubFlowOpen && (
           <GitHubLoginPanel
+            externalStatus={githubStatus}
             onClose={() => setGitHubFlowOpen(false)}
             onSuccess={() => {
               setGitHubFlowOpen(false)

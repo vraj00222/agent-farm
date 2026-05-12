@@ -24,6 +24,7 @@ import {
 } from './pty'
 import { killAgent, killAgentsForWebContents, spawnAgent } from './agent-runner'
 import {
+  checkOnce as githubCheckOnce,
   currentStatus as githubCurrentStatus,
   hydrateOnBoot as hydrateGitHub,
   pollForToken as githubPollForToken,
@@ -192,6 +193,12 @@ function registerIpc(): void {
       return { ok: false as const, reason: 'invalid arguments' }
     }
     return githubPollForToken(deviceCode, interval)
+  })
+  ipcMain.handle(IPC.GitHubCheckOnce, async (_e, deviceCode: string) => {
+    if (typeof deviceCode !== 'string') {
+      return { ok: false as const, reason: 'invalid device code' }
+    }
+    return githubCheckOnce(deviceCode)
   })
   ipcMain.handle(IPC.GitHubSignOut, async () => githubSignOut())
 }
