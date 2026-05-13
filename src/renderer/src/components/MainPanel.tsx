@@ -13,28 +13,40 @@ interface MainPanelProps {
 
 /**
  * Middle pane.
- *   - Agent selected → header + that agent's streamed output.
- *   - No agent + claude available → live interactive `claude` shell at the
- *     project root (the actual product surface).
- *   - No claude / no project → typographic fallback.
+ *
+ * Key invariant: CenterTerminal stays mounted as long as we have a project
+ * + claude binary. Selecting an agent must NOT unmount it, otherwise the
+ * claude REPL pty gets killed (signal 1) and the user loses their session.
+ *
+ * Layout:
+ *   - No project / claude → typographic fallback
+ *   - Project, no agent selected → claude REPL full-height
+ *   - Project + agent selected → agent details (top 40%) + claude REPL
+ *     (bottom 60%), separated by a divider
  */
 export function MainPanel({ agent, projectPath, claudeBinary }: MainPanelProps) {
-  if (agent) {
-    return (
-      <div key={agent.id} className="flex flex-col h-full overflow-hidden animate-fade-in">
-        <Header agent={agent} />
-        <div className="flex-1 overflow-y-auto px-8 py-6">
-          <Tail agent={agent} />
+  if (!projectPath || !claudeBinary) {
+    return <FallbackEmpty />
+  }
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {agent && (
+        <div
+          key={agent.id}
+          className="basis-[40%] min-h-0 border-b border-line dark:border-line-dark
+                     flex flex-col overflow-hidden animate-fade-in"
+        >
+          <Header agent={agent} />
+          <div className="flex-1 overflow-y-auto px-8 py-4">
+            <Tail agent={agent} />
+          </div>
         </div>
+      )}
+      <div className={agent ? 'basis-[60%] min-h-0' : 'flex-1 min-h-0'}>
+        <CenterTerminal projectPath={projectPath} claudeBinary={claudeBinary} />
       </div>
-    )
-  }
-
-  if (projectPath && claudeBinary) {
-    return <CenterTerminal projectPath={projectPath} claudeBinary={claudeBinary} />
-  }
-
-  return <FallbackEmpty />
+    </div>
+  )
 }
 
 function CenterTerminal({

@@ -68,10 +68,25 @@ export function createPty(
       signal: typeof signal === 'number' ? signal : null,
     })
     sessions.delete(id)
-    void logger.info('pty exit', { id, exitCode, signal })
+    // Signal 1 (SIGHUP) on exit means the parent (renderer) called pty.kill —
+    // usually because a React component unmounted. Logging both lets us see
+    // WHEN and WHY a session died at a glance in the log file.
+    void logger.info('pty exit', {
+      id,
+      exitCode,
+      signal,
+      cause: signal === 1 ? 'killed-by-renderer' : 'self-exit',
+    })
   })
 
-  void logger.info('pty spawn', { id, command: opts.command, args: opts.args, cwd: opts.cwd })
+  void logger.info('pty spawn', {
+    id,
+    command: opts.command,
+    args: opts.args,
+    cwd: opts.cwd,
+    cols,
+    rows,
+  })
   return { ok: true, sessionId: id }
 }
 
@@ -96,7 +111,11 @@ export function resizePty(sessionId: string, cols: number, rows: number): void {
 
 export function killPty(sessionId: string): void {
   const s = sessions.get(sessionId)
-  if (!s) return
+  if (!s) {
+    void logger.info('pty kill: unknown id (already exited?)', { sessionId })
+    return
+  }
+  void logger.info('pty kill: by request from renderer', { sessionId })
   try {
     s.pty.kill()
   } catch {
