@@ -49,14 +49,37 @@ function CenterTerminal({
   // dialog as soon as we see it in the stream.
   const sessionIdRef = useRef<string | null>(null)
   const acceptedRef = useRef(false)
+  // Rolling buffer of recent output; the dialog can come across multiple chunks
+  // so we need to match against the concatenation, not each chunk individually.
+  const bufferRef = useRef('')
+  // Total bytes streamed since spawn. The bypass dialog is always at the
+  // very top of the session — once we're past a few KB we stop matching
+  // entirely so claude's own task output can't false-positive into a
+  // spurious Enter (which would submit an empty prompt or interrupt
+  // generation).
+  const bytesSeenRef = useRef(0)
 
   const handleOutput = (chunk: string) => {
     if (acceptedRef.current) return
-    // Claude prints this banner once at session start when run with
-    // --dangerously-skip-permissions. Default selection is "Yes, I accept",
-    // so we just send Enter — same effect as the user hitting Return.
-    if (/Bypass Permissions mode/i.test(chunk) || /Yes,\s*I\s*accept/i.test(chunk)) {
+    bytesSeenRef.current += chunk.length
+    if (bytesSeenRef.current > 4096) {
+      // Past the window where the dialog could appear — stop matching.
       acceptedRef.current = true
+      bufferRef.current = ''
+      return
+    }
+    bufferRef.current = (bufferRef.current + chunk).slice(-4096)
+    // Match the dialog's unique fingerprint: the legal-text phrase AND the
+    // "Yes, I accept" option AND the "Enter to confirm" prompt. All three
+    // appear together only in this one dialog, never in claude's normal
+    // REPL output or in a task response.
+    if (
+      /responsibility for actions/i.test(bufferRef.current) &&
+      /Yes,\s*I\s*accept/i.test(bufferRef.current) &&
+      /Enter to confirm/i.test(bufferRef.current)
+    ) {
+      acceptedRef.current = true
+      bufferRef.current = ''
       const id = sessionIdRef.current
       if (id) {
         // Tiny delay so Claude finishes painting the dialog before we input.
@@ -90,9 +113,10 @@ function CenterTerminal({
           }}
           onSession={(id) => {
             sessionIdRef.current = id
-            // Reset acceptance state per session — each new spawn shows the
-            // banner once.
+            // Reset per session — each new spawn shows the dialog once.
             acceptedRef.current = false
+            bufferRef.current = ''
+            bytesSeenRef.current = 0
           }}
           onOutput={handleOutput}
         />
