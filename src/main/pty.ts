@@ -94,6 +94,27 @@ export function writePty(sessionId: string, data: string): void {
   const s = sessions.get(sessionId)
   if (!s) return
   if (typeof data !== 'string') return
+  // Diagnostic: any time a control character (0x00–0x1f or 0x7f) hits the
+  // pty, log it with its escape code visible. Regular typing has no control
+  // chars and won't spam the log, but the things that would cause claude to
+  // interrupt — Esc (\x1b), Ctrl-C (\x03), bare Enter (\r), arrow keys
+  // (\x1b[A/B/C/D), etc. — show up clearly here so we can correlate them
+  // with the "Interrupted" symptom in the timestamp column.
+  if (/[\x00-\x1f\x7f]/.test(data)) {
+    const debug = Array.from(data)
+      .map((c) => {
+        const code = c.charCodeAt(0)
+        if (code < 32 || code === 127)
+          return `\\x${code.toString(16).padStart(2, '0')}`
+        return c
+      })
+      .join('')
+    void logger.info('pty write [control char]', {
+      sessionId,
+      len: data.length,
+      data: debug,
+    })
+  }
   s.pty.write(data)
 }
 

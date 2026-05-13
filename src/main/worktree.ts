@@ -34,18 +34,39 @@ export interface CreateWorktreeError {
   reason: string
 }
 
+/** True if a branch with that name already exists in this repo. */
+async function branchExists(projectPath: string, branch: string): Promise<boolean> {
+  try {
+    await git(['show-ref', '--verify', `refs/heads/${branch}`], projectPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function createWorktree(
   projectPath: string,
   slug: string,
 ): Promise<CreateWorktreeResult | CreateWorktreeError> {
-  const branch = `agent/${slug}`
-  const worktreePath = worktreePathFor(projectPath, slug)
-
   try {
     await fs.mkdir(worktreeRoot(), { recursive: true })
 
     // base SHA — what we branch off
     const baseSha = (await git(['rev-parse', 'HEAD'], projectPath)).trim()
+
+    // Avoid colliding with stale branches from previous runs. If
+    // `agent/<slug>` is taken, try `agent/<slug>-2`, `-3`, …, `-50`.
+    let branch = `agent/${slug}`
+    let worktreePath = worktreePathFor(projectPath, slug)
+    let suffix = 1
+    while (await branchExists(projectPath, branch)) {
+      suffix += 1
+      if (suffix > 50) {
+        return { ok: false, reason: `branch agent/${slug} already exists (and 50 numbered variants)` }
+      }
+      branch = `agent/${slug}-${suffix}`
+      worktreePath = worktreePathFor(projectPath, `${slug}-${suffix}`)
+    }
 
     // git worktree add --detach? we want a real branch so the user can
     // cherry-pick / push later.
