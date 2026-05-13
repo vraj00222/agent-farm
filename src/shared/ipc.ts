@@ -145,6 +145,49 @@ export type GitDiffResult =
   | { ok: true; diff: string; filesChanged: number }
   | { ok: false; reason: string }
 
+/** A single line inside a hunk, classified by leading character. */
+export interface DiffLine {
+  /** ` ` = context, `+` = added, `-` = removed. */
+  kind: 'context' | 'add' | 'del'
+  /** Line content (without the leading +/-/space). */
+  text: string
+}
+
+/** One hunk inside a file diff. Mirrors `@@ -oldStart,oldCount +newStart,newCount @@`. */
+export interface DiffHunk {
+  /** Raw hunk header for display. */
+  header: string
+  oldStart: number
+  oldCount: number
+  newStart: number
+  newCount: number
+  lines: DiffLine[]
+}
+
+export interface DiffFile {
+  /** Path as it appears in the current working tree (or `/dev/null` if deleted). */
+  path: string
+  /** Original path when the change is a rename. Same as `path` otherwise. */
+  oldPath: string
+  kind: 'added' | 'modified' | 'deleted' | 'renamed' | 'binary'
+  /** True when the diff was binary and hunks are empty. */
+  binary: boolean
+  addedLines: number
+  removedLines: number
+  hunks: DiffHunk[]
+}
+
+export interface GitDiffStructuredOptions {
+  /** Repo / worktree path. */
+  path: string
+  /** Comparison base. Empty / undefined → `HEAD` (uncommitted vs index+working). */
+  baseSha?: string
+}
+
+export type GitDiffStructuredResult =
+  | { ok: true; files: DiffFile[]; truncated: boolean }
+  | { ok: false; reason: string }
+
 // ── Agent runner (per-task spawn) ────────────────────────────────────
 
 export interface AgentSpawnOptions {
@@ -272,6 +315,7 @@ export const IPC = {
   RevealInFinder: 'shell:reveal',
   FsList: 'fs:list',
   GitDiff: 'git:diff',
+  GitDiffStructured: 'git:diff-structured',
   AgentSpawn: 'agent:spawn',
   AgentKill: 'agent:kill',
   AgentEvent: 'agent:event',
@@ -355,6 +399,9 @@ export interface AgentFarmApi {
 
   git: {
     diff(path: string): Promise<GitDiffResult>
+    /** Parsed diff: per-file metadata + hunks with classified lines.
+     *  baseSha optional — defaults to comparing against HEAD. */
+    diffStructured(opts: GitDiffStructuredOptions): Promise<GitDiffStructuredResult>
   }
 
   pty: {

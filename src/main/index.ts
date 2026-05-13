@@ -13,7 +13,7 @@ import { cloneProject, inspectPath, openProjectDialog } from './project'
 import { detectClaude } from './claude'
 import { openClaudeLoginInTerminal } from './claude-auth'
 import { listProjectTree } from './fs-list'
-import { getGitDiff } from './git-diff'
+import { getGitDiff, getGitDiffStructured } from './git-diff'
 import { runSmoke } from './smoke'
 import {
   createPty,
@@ -138,6 +138,20 @@ function registerIpc(): void {
       return { ok: false, reason: 'path required' }
     }
     return getGitDiff(path)
+  })
+
+  ipcMain.handle(IPC.GitDiffStructured, async (_e, opts: unknown) => {
+    if (!opts || typeof opts !== 'object') {
+      return { ok: false, reason: 'opts required' }
+    }
+    const o = opts as { path?: unknown; baseSha?: unknown }
+    if (typeof o.path !== 'string') {
+      return { ok: false, reason: 'path required' }
+    }
+    return getGitDiffStructured({
+      path: o.path,
+      baseSha: typeof o.baseSha === 'string' ? o.baseSha : undefined,
+    })
   })
 
   ipcMain.handle(IPC.RevealInFinder, async (_e, path: string) => {

@@ -10,6 +10,8 @@ import {
   type FsListOptions,
   type FsListResult,
   type GitDiffResult,
+  type GitDiffStructuredOptions,
+  type GitDiffStructuredResult,
   type GitHubPollResult,
   type GitHubStartFlowResult,
   type GitHubStatus,
@@ -87,6 +89,8 @@ const api: AgentFarmApi = {
 
   git: {
     diff: (path: string): Promise<GitDiffResult> => ipcRenderer.invoke(IPC.GitDiff, path),
+    diffStructured: (opts: GitDiffStructuredOptions): Promise<GitDiffStructuredResult> =>
+      ipcRenderer.invoke(IPC.GitDiffStructured, opts),
   },
 
   pty: {
