@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto'
 import { BrowserWindow } from 'electron'
 import { logger } from './logger'
 import { createWorktree, removeWorktree } from './worktree'
-import { trustProjectForClaude } from './claude-trust'
 import { IPC, type AgentEvent, type AgentSpawnOptions, type AgentSpawnResult } from '../shared/ipc'
 
 const exec = promisify(execFile)
@@ -98,10 +97,18 @@ export async function spawnAgent(
     return { ok: false, reason: `worktree: ${wt.reason}` }
   }
 
-  // 2a. Mark the worktree path as trusted so claude doesn't gate on the
-  //     "Do you trust the files in this folder?" dialog. Best-effort; the
-  //     --dangerously-skip-permissions flag covers us if this fails.
-  await trustProjectForClaude(wt.worktreePath)
+  // NOTE: we deliberately do NOT call trustProjectForClaude here.
+  //
+  // The agent runs `claude -p` (print mode) with --dangerously-skip-permissions.
+  // The "Do you trust this folder?" dialog is interactive and physically
+  // cannot appear in -p mode, so the trust write was pure belt-and-braces.
+  //
+  // It also had a real cost: every agent spawn mutated ~/.claude.json, and
+  // the interactive claude session in the middle pane appears to fs.watch
+  // that file and reload its config on change. Mid-generation reload
+  // = "Interrupted · What should Claude do instead?" the user kept hitting
+  // on the next REPL prompt. Skipping the write removes the cause without
+  // breaking the agent (the CLI flag still covers trust).
 
   // 3. Build the claude command. `-p` (print mode) is non-interactive,
   //    streams to stdout then exits.

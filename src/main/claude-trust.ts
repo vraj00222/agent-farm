@@ -92,7 +92,11 @@ async function doTrust(target: string): Promise<void> {
   try {
     await fs.writeFile(tmp, JSON.stringify(next, null, 2) + '\n', 'utf8')
     await fs.rename(tmp, CONFIG_PATH)
-    await logger.info('claude-trust: project marked trusted', { target })
+    // ⚠️ Heads-up logging: every write here touches ~/.claude.json, which
+    // an interactive claude session in the middle pane fs.watches. If a
+    // write happens while that session is generating, it interrupts the
+    // response. Watch for this line in the log right before "Interrupted".
+    await logger.info('claude-trust: WROTE ~/.claude.json', { target })
   } catch (err) {
     try {
       await fs.rm(tmp, { force: true })
