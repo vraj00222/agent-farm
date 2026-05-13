@@ -130,13 +130,24 @@ export function EmbeddedTerminal({
     ro.observe(container)
 
     void (async () => {
+      // ⚡ React 18 StrictMode runs this effect twice in dev. Without this
+      // yield, both passes synchronously call `api.pty.create` before the
+      // first pass's cleanup can flip `killed`. Result: TWO claude processes
+      // briefly run in the SAME project directory, corrupting each other's
+      // ~/.claude / session-state files. The survivor then shows "Interrupted"
+      // on the first real prompt because its state is inconsistent. Yielding
+      // to the macrotask queue lets the first effect's cleanup run first,
+      // flip `killed`, and skip the doomed spawn entirely.
+      await new Promise<void>((r) => setTimeout(r, 0))
+      if (killed) return
+
       const result = await api.pty.create({ ...spawn, cols, rows })
       if (!result.ok) {
         setError(result.message)
         return
       }
       if (killed) {
-        // Unmounted before spawn returned.
+        // Unmounted after spawn returned (e.g. tab closed during spawn).
         void api.pty.kill(result.sessionId)
         return
       }
