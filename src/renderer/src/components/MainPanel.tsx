@@ -45,46 +45,65 @@ function CenterTerminal({
   projectPath: string
   claudeBinary: string
 }) {
-  // Track the active pty session so we can auto-accept the bypass-permissions
-  // dialog as soon as we see it in the stream.
+  // Track the active pty session so we can auto-handle the startup dialogs.
   const sessionIdRef = useRef<string | null>(null)
-  const acceptedRef = useRef(false)
-  // Rolling buffer of recent output; the dialog can come across multiple chunks
-  // so we need to match against the concatenation, not each chunk individually.
+  // Two independent dialogs may appear at session start in any combination:
+  //   1. Settings Error — when a repo has a malformed `.claude/settings.json`
+  //      or `.claude/settings.local.json`. Default focus is "Exit and fix
+  //      manually" which kills claude. We need to navigate to option 2
+  //      ("Continue without these settings") and submit.
+  //   2. Bypass Permissions mode — shown once per session when run with
+  //      --dangerously-skip-permissions. Default focus is "Yes, I accept",
+  //      so a bare Enter accepts.
+  const settingsHandledRef = useRef(false)
+  const bypassHandledRef = useRef(false)
+  // Rolling buffer of recent output; dialogs render in chunks so we match
+  // against the concatenation, not individual chunks.
   const bufferRef = useRef('')
-  // Total bytes streamed since spawn. The bypass dialog is always at the
-  // very top of the session — once we're past a few KB we stop matching
-  // entirely so claude's own task output can't false-positive into a
-  // spurious Enter (which would submit an empty prompt or interrupt
-  // generation).
+  // Total bytes streamed since spawn. Both dialogs are always at session
+  // start; past a few KB we stop matching entirely so claude's task output
+  // can't false-positive into a spurious keypress (which would submit empty
+  // or interrupt mid-generation).
   const bytesSeenRef = useRef(0)
 
   const handleOutput = (chunk: string) => {
-    if (acceptedRef.current) return
+    // Once both dialogs handled (or we've moved past the window), stop work.
+    if (settingsHandledRef.current && bypassHandledRef.current) return
     bytesSeenRef.current += chunk.length
-    if (bytesSeenRef.current > 4096) {
-      // Past the window where the dialog could appear — stop matching.
-      acceptedRef.current = true
+    if (bytesSeenRef.current > 8192) {
+      settingsHandledRef.current = true
+      bypassHandledRef.current = true
       bufferRef.current = ''
       return
     }
-    bufferRef.current = (bufferRef.current + chunk).slice(-4096)
-    // Match the dialog's unique fingerprint: the legal-text phrase AND the
-    // "Yes, I accept" option AND the "Enter to confirm" prompt. All three
-    // appear together only in this one dialog, never in claude's normal
-    // REPL output or in a task response.
+    bufferRef.current = (bufferRef.current + chunk).slice(-8192)
+    const id = sessionIdRef.current
+    if (!id) return
+
+    // Settings Error: unique phrases that only appear in this dialog. Send
+    // Down arrow (\x1b[B) to move focus from "Exit" to "Continue", then \r.
     if (
-      /responsibility for actions/i.test(bufferRef.current) &&
-      /Yes,\s*I\s*accept/i.test(bufferRef.current) &&
-      /Enter to confirm/i.test(bufferRef.current)
+      !settingsHandledRef.current &&
+      /Settings Error/i.test(bufferRef.current) &&
+      /Continue without these settings/i.test(bufferRef.current)
     ) {
-      acceptedRef.current = true
+      settingsHandledRef.current = true
       bufferRef.current = ''
-      const id = sessionIdRef.current
-      if (id) {
-        // Tiny delay so Claude finishes painting the dialog before we input.
-        setTimeout(() => void window.agentFarm?.pty.write(id, '\r'), 250)
-      }
+      void window.agentFarm?.pty.write(id, '\x1b[B\r')
+      return
+    }
+
+    // Bypass Permissions: unique phrases. Default focus is on "Yes, I accept"
+    // (option 2). A bare \r submits it.
+    if (
+      !bypassHandledRef.current &&
+      /responsibility for actions/i.test(bufferRef.current) &&
+      /Yes,\s*I\s*accept/i.test(bufferRef.current)
+    ) {
+      bypassHandledRef.current = true
+      bufferRef.current = ''
+      void window.agentFarm?.pty.write(id, '\r')
+      return
     }
   }
 
@@ -113,8 +132,9 @@ function CenterTerminal({
           }}
           onSession={(id) => {
             sessionIdRef.current = id
-            // Reset per session — each new spawn shows the dialog once.
-            acceptedRef.current = false
+            // Reset per session — each spawn may show each dialog once.
+            settingsHandledRef.current = false
+            bypassHandledRef.current = false
             bufferRef.current = ''
             bytesSeenRef.current = 0
           }}
