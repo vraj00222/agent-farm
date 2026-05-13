@@ -108,7 +108,18 @@ export function EmbeddedTerminal({
     let killed = false
 
     const inputDisposable = term.onData((data) => {
-      if (sessionId) void api.pty.write(sessionId, data)
+      if (!sessionId) return
+      // Strip xterm focus-reporting sequences (CSI I / CSI O). xterm.js
+      // emits these whenever the terminal gains/loses focus — e.g. when
+      // the user clicks from the middle pane into the bottom prompt bar.
+      // Claude's TUI was treating them as Esc-style input and cancelling
+      // its own generation, producing the "Interrupted · What should
+      // Claude do instead?" symptom on the next prompt. Focus events
+      // aren't useful here; drop them on the floor.
+      // eslint-disable-next-line no-control-regex
+      const filtered = data.replace(/\x1b\[[IO]/g, '')
+      if (filtered.length === 0) return
+      void api.pty.write(sessionId, filtered)
     })
 
     const resizeDisposable = term.onResize(({ cols: c, rows: r }) => {
