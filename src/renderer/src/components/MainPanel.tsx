@@ -1,4 +1,3 @@
-import { useRef } from 'react'
 import clsx from 'clsx'
 import type { Agent } from '@/types/agent'
 import { fmtElapsed, fmtTokens } from '@/lib/format'
@@ -45,67 +44,25 @@ function CenterTerminal({
   projectPath: string
   claudeBinary: string
 }) {
-  // Track the active pty session so we can auto-handle the startup dialogs.
-  const sessionIdRef = useRef<string | null>(null)
-  // Two independent dialogs may appear at session start in any combination:
-  //   1. Settings Error — when a repo has a malformed `.claude/settings.json`
-  //      or `.claude/settings.local.json`. Default focus is "Exit and fix
-  //      manually" which kills claude. We need to navigate to option 2
-  //      ("Continue without these settings") and submit.
-  //   2. Bypass Permissions mode — shown once per session when run with
-  //      --dangerously-skip-permissions. Default focus is "Yes, I accept",
-  //      so a bare Enter accepts.
-  const settingsHandledRef = useRef(false)
-  const bypassHandledRef = useRef(false)
-  // Rolling buffer of recent output; dialogs render in chunks so we match
-  // against the concatenation, not individual chunks.
-  const bufferRef = useRef('')
-  // Total bytes streamed since spawn. Both dialogs are always at session
-  // start; past a few KB we stop matching entirely so claude's task output
-  // can't false-positive into a spurious keypress (which would submit empty
-  // or interrupt mid-generation).
-  const bytesSeenRef = useRef(0)
-
-  const handleOutput = (chunk: string) => {
-    // Once both dialogs handled (or we've moved past the window), stop work.
-    if (settingsHandledRef.current && bypassHandledRef.current) return
-    bytesSeenRef.current += chunk.length
-    if (bytesSeenRef.current > 8192) {
-      settingsHandledRef.current = true
-      bypassHandledRef.current = true
-      bufferRef.current = ''
-      return
-    }
-    bufferRef.current = (bufferRef.current + chunk).slice(-8192)
-    const id = sessionIdRef.current
-    if (!id) return
-
-    // Settings Error: unique phrases that only appear in this dialog. Send
-    // Down arrow (\x1b[B) to move focus from "Exit" to "Continue", then \r.
-    if (
-      !settingsHandledRef.current &&
-      /Settings Error/i.test(bufferRef.current) &&
-      /Continue without these settings/i.test(bufferRef.current)
-    ) {
-      settingsHandledRef.current = true
-      bufferRef.current = ''
-      void window.agentFarm?.pty.write(id, '\x1b[B\r')
-      return
-    }
-
-    // Bypass Permissions: unique phrases. Default focus is on "Yes, I accept"
-    // (option 2). A bare \r submits it.
-    if (
-      !bypassHandledRef.current &&
-      /responsibility for actions/i.test(bufferRef.current) &&
-      /Yes,\s*I\s*accept/i.test(bufferRef.current)
-    ) {
-      bypassHandledRef.current = true
-      bufferRef.current = ''
-      void window.agentFarm?.pty.write(id, '\r')
-      return
-    }
-  }
+  // AUTO-ACCEPT TEMPORARILY DISABLED.
+  //
+  // The previous code watched for the Bypass-Permissions / Settings-Error
+  // dialogs and auto-pressed Enter (or Down+Enter). But Vraj kept hitting
+  // "Interrupted" on the first real prompt ("hey") even after several
+  // tightening passes. Most likely culprit: the \x1b in our Settings-Error
+  // Down-key sequence (\x1b[B\r) being interpreted by claude's REPL as an
+  // ESC = cancel-generation signal when our regex misfired late in the
+  // session.
+  //
+  // For now, send NO keystrokes from the renderer. The user presses Enter
+  // once for Bypass (the default focused option is "Yes, I accept" so it's
+  // ok) and once for Settings Error if it appears (defaults to "Exit", so
+  // the user has to consciously pick option 2 — annoying but at least the
+  // app doesn't break "hey").
+  //
+  // When we re-introduce auto-accept it MUST: (a) only fire within the first
+  // ~3 s of session, (b) be gated on a strict "session just started" flag,
+  // (c) avoid \x1b in keystrokes — type the option number instead.
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -130,15 +87,6 @@ function CenterTerminal({
             cols: 100,
             rows: 28,
           }}
-          onSession={(id) => {
-            sessionIdRef.current = id
-            // Reset per session — each spawn may show each dialog once.
-            settingsHandledRef.current = false
-            bypassHandledRef.current = false
-            bufferRef.current = ''
-            bytesSeenRef.current = 0
-          }}
-          onOutput={handleOutput}
         />
       </div>
     </div>

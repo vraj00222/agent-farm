@@ -210,61 +210,89 @@ function Recents({
   onOpen: (path: string) => void
   onForget?: (path: string) => void
 }) {
+  // Collapse the list past N entries. The bottom edge fades out so users
+  // know there's more. "Show all" expands; "Show less" collapses again.
+  const INITIAL = 5
+  const [expanded, setExpanded] = useState(false)
+  const visible = expanded ? recents : recents.slice(0, INITIAL)
+  const hidden = Math.max(0, recents.length - INITIAL)
+  const showToggle = recents.length > INITIAL
   return (
     <div
       className="w-full max-w-[760px] animate-rise"
       style={{ animationDelay: '650ms' }}
     >
-      <p
-        className="font-mono text-[10px] uppercase tracking-cap
-                   text-ink-400 dark:text-chalk-subtle mb-2 px-1"
-      >
-        recent projects
-      </p>
-      <ul className="flex flex-col gap-1.5">
-        {recents.map((r) => (
-          <li
-            key={r.path}
-            className="group flex items-stretch gap-1.5"
+      <div className="flex items-baseline justify-between mb-2 px-1">
+        <p className="font-mono text-[10px] uppercase tracking-cap text-ink-400 dark:text-chalk-subtle">
+          recent projects
+        </p>
+        {showToggle && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="no-drag font-mono text-[10px] uppercase tracking-cap
+                       text-ink-500 dark:text-chalk-dim
+                       hover:text-ink-900 dark:hover:text-chalk
+                       transition-colors"
           >
-            <button
-              type="button"
-              onClick={() => onOpen(r.path)}
-              className="flex-1 min-w-0 no-drag text-left flex items-baseline gap-3
-                         px-3 py-2 rounded-md
-                         border border-line dark:border-line-dark
-                         hover:border-ink-500 dark:hover:border-chalk-dim
-                         hover:bg-bone-raised dark:hover:bg-coal-raised
-                         transition-all duration-150"
-              title={r.path}
+            {expanded ? 'show less' : `show all (+${hidden})`}
+          </button>
+        )}
+      </div>
+      <div className="relative">
+        <ul className="flex flex-col gap-1.5">
+          {visible.map((r) => (
+            <li
+              key={r.path}
+              className="group flex items-stretch gap-1.5"
             >
-              <span className="font-display font-semibold text-[13px] text-ink-900 dark:text-chalk truncate">
-                {r.repoName}
-              </span>
-              <span className="font-mono text-[10.5px] text-ink-500 dark:text-chalk-dim truncate">
-                {r.path}
-              </span>
-            </button>
-            {onForget && (
               <button
                 type="button"
-                onClick={() => onForget(r.path)}
-                aria-label={`Forget ${r.repoName}`}
-                title="Remove from recents"
-                className="no-drag px-3 rounded-md
+                onClick={() => onOpen(r.path)}
+                className="flex-1 min-w-0 no-drag text-left flex items-baseline gap-3
+                           px-3 py-2 rounded-md
                            border border-line dark:border-line-dark
-                           hover:border-state-failed
-                           text-ink-500 dark:text-chalk-dim
-                           hover:text-state-failed
-                           font-mono text-[10px] uppercase tracking-cap
+                           hover:border-ink-500 dark:hover:border-chalk-dim
+                           hover:bg-bone-raised dark:hover:bg-coal-raised
                            transition-all duration-150"
+                title={r.path}
               >
-                forget
+                <span className="font-display font-semibold text-[13px] text-ink-900 dark:text-chalk truncate">
+                  {r.repoName}
+                </span>
+                <span className="font-mono text-[10.5px] text-ink-500 dark:text-chalk-dim truncate">
+                  {r.path}
+                </span>
               </button>
-            )}
-          </li>
-        ))}
-      </ul>
+              {onForget && (
+                <button
+                  type="button"
+                  onClick={() => onForget(r.path)}
+                  aria-label={`Forget ${r.repoName}`}
+                  title="Remove from recents"
+                  className="no-drag px-3 rounded-md
+                             border border-line dark:border-line-dark
+                             hover:border-state-failed
+                             text-ink-500 dark:text-chalk-dim
+                             hover:text-state-failed
+                             font-mono text-[10px] uppercase tracking-cap
+                             transition-all duration-150"
+                >
+                  forget
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+        {/* Bottom fade hint when collapsed and more exist below. */}
+        {!expanded && showToggle && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-12
+                       bg-gradient-to-t from-bone dark:from-coal to-transparent"
+          />
+        )}
+      </div>
     </div>
   )
 }
