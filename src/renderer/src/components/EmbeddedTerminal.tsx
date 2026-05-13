@@ -118,6 +118,11 @@ export function EmbeddedTerminal({
     const ro = new ResizeObserver(() => {
       try {
         fit.fit()
+        // After a fit, scroll past any malformed scrollback (e.g. claude's
+        // welcome banner that was rendered at the previous width). xterm.js
+        // doesn't reflow on resize, so old wide content gets clipped — but
+        // the prompt at the bottom is what the user actually interacts with.
+        term.scrollToBottom()
       } catch {
         /* ignore */
       }

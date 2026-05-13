@@ -522,28 +522,10 @@ function AppTitleBar({
             v{__APP_VERSION__}
           </span>
         </div>
-        {account && <AccountChip account={account} />}
+        {account && <AccountChip account={account} onReauth={onSignInAgain ?? undefined} />}
         {githubAccount && <GitHubChip account={githubAccount} />}
       </div>
       <div className="flex items-center gap-2">
-        {onSignInAgain && (
-          <button
-            type="button"
-            onClick={onSignInAgain}
-            onMouseDown={(e) => e.preventDefault()}
-            className="no-drag inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md
-                       border border-line dark:border-line-dark
-                       hover:border-ink-500 dark:hover:border-chalk-dim
-                       hover:bg-bone-raised dark:hover:bg-coal-raised
-                       text-ink-700 dark:text-chalk-dim
-                       hover:text-ink-900 dark:hover:text-chalk
-                       font-display font-semibold text-[11px]
-                       transition-all duration-150"
-            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-          >
-            Sign in again
-          </button>
-        )}
         {onTogglePanel && (
           <button
             type="button"
@@ -589,28 +571,31 @@ function AppTitleBar({
 }
 
 /** Small "Vraj Patel · Pro" chip next to the brand. Pulled from
- *  ~/.claude.json's oauthAccount; nothing else is queried at runtime. */
+ *  ~/.claude.json's oauthAccount; nothing else is queried at runtime.
+ *  Clickable when `onReauth` is provided — re-opens the sign-in flow.
+ *  Replaces the old standalone "Sign in again" button which cluttered
+ *  the title bar. */
 function AccountChip({
   account,
+  onReauth,
 }: {
   account: import('../../shared/ipc').ClaudeAccount
+  onReauth?: () => void
 }) {
   const name =
     account.displayName ??
     (account.emailAddress ? account.emailAddress.split('@')[0] : 'claude')
   const tier = friendlyTier(account.seatTier)
-  return (
-    <span
-      className="no-drag inline-flex items-baseline gap-1.5 px-2 py-0.5 rounded
-                 border border-line dark:border-line-dark
-                 bg-bone-sunk dark:bg-coal-sunk"
-      title={
-        account.emailAddress
-          ? `${account.emailAddress}${account.organizationName ? ' · ' + account.organizationName : ''}`
-          : undefined
-      }
-      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-    >
+  const baseCls =
+    'no-drag inline-flex items-baseline gap-1.5 px-2 py-0.5 rounded ' +
+    'border border-line dark:border-line-dark bg-bone-sunk dark:bg-coal-sunk'
+  const title = onReauth
+    ? `${account.emailAddress ?? 'claude'} · click to re-sign-in`
+    : account.emailAddress
+      ? `${account.emailAddress}${account.organizationName ? ' · ' + account.organizationName : ''}`
+      : undefined
+  const content = (
+    <>
       <span className="font-display font-semibold text-[11px] text-ink-900 dark:text-chalk">
         {name}
       </span>
@@ -619,6 +604,29 @@ function AccountChip({
           {tier}
         </span>
       )}
+    </>
+  )
+  if (onReauth) {
+    return (
+      <button
+        type="button"
+        onClick={onReauth}
+        onMouseDown={(e) => e.preventDefault()}
+        title={title}
+        className={baseCls + ' hover:border-ink-500 dark:hover:border-chalk-dim transition-colors cursor-pointer'}
+        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+      >
+        {content}
+      </button>
+    )
+  }
+  return (
+    <span
+      className={baseCls}
+      title={title}
+      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+    >
+      {content}
     </span>
   )
 }

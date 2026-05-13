@@ -170,6 +170,15 @@ curl -fsSL https://claude.ai/install.sh | bash`}
           <span className="font-mono">claude login</span> in your terminal once,
           then click retry.
         </p>
+        <div className="mt-2 flex items-center gap-2 text-[10.5px] text-ink-400 dark:text-chalk-subtle">
+          <span className="font-mono px-1.5 py-0.5 rounded border border-line dark:border-line-dark uppercase tracking-cap">
+            Coming soon
+          </span>
+          <span>
+            Bring your own API key (Anthropic Console, Novita, OpenRouter…) +
+            per-key model selection.
+          </span>
+        </div>
       </div>
     )
   }

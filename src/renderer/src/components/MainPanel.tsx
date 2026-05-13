@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import clsx from 'clsx'
 import type { Agent } from '@/types/agent'
 import { fmtElapsed, fmtTokens } from '@/lib/format'
@@ -44,6 +45,26 @@ function CenterTerminal({
   projectPath: string
   claudeBinary: string
 }) {
+  // Track the active pty session so we can auto-accept the bypass-permissions
+  // dialog as soon as we see it in the stream.
+  const sessionIdRef = useRef<string | null>(null)
+  const acceptedRef = useRef(false)
+
+  const handleOutput = (chunk: string) => {
+    if (acceptedRef.current) return
+    // Claude prints this banner once at session start when run with
+    // --dangerously-skip-permissions. Default selection is "Yes, I accept",
+    // so we just send Enter — same effect as the user hitting Return.
+    if (/Bypass Permissions mode/i.test(chunk) || /Yes,\s*I\s*accept/i.test(chunk)) {
+      acceptedRef.current = true
+      const id = sessionIdRef.current
+      if (id) {
+        // Tiny delay so Claude finishes painting the dialog before we input.
+        setTimeout(() => void window.agentFarm?.pty.write(id, '\r'), 250)
+      }
+    }
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-line dark:border-line-dark">
@@ -67,6 +88,13 @@ function CenterTerminal({
             cols: 100,
             rows: 28,
           }}
+          onSession={(id) => {
+            sessionIdRef.current = id
+            // Reset acceptance state per session — each new spawn shows the
+            // banner once.
+            acceptedRef.current = false
+          }}
+          onOutput={handleOutput}
         />
       </div>
     </div>
